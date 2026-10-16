@@ -23,6 +23,10 @@ model Duty {
   days      Int[]    @default([])
   /// Set for a one-time duty: the only date it is due.
   onceDate  String?
+  /// Set for a monthly duty: the day of the month it is due, 1–31, or -1 for
+  /// the last day. A day the month doesn't have (the 31st in April) falls on
+  /// that month's last day, so a monthly duty is never skipped.
+  monthDay  Int?
   /// "HH:MM" it should be done by, or blank.
   dueBy     String   @default("")
   priority  Boolean  @default(false)

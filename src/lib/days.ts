@@ -84,16 +84,35 @@ export function zonedTime(key: string, t: string): Date {
   return new Date(ts);
 }
 
-type Schedulable = { active: boolean; days: number[]; onceDate: string | null };
+type Schedulable = { active: boolean; days: number[]; onceDate: string | null; monthDay: number | null };
+
+/** The number of days in the month a day falls in. */
+function daysInMonth(key: string): number {
+  const [y, m] = key.split("-").map(Number);
+  return new Date(Date.UTC(y, m, 0)).getUTCDate();
+}
 
 export function isDue(duty: Schedulable, key: string): boolean {
   if (!duty.active) return false;
   if (duty.onceDate) return duty.onceDate === key;
+  if (duty.monthDay != null) {
+    const last = daysInMonth(key);
+    const target = duty.monthDay === -1 ? last : Math.min(duty.monthDay, last);
+    return Number(key.slice(8, 10)) === target;
+  }
   return duty.days.includes(weekdayOf(key));
 }
 
-export function scheduleText(duty: { days: number[]; onceDate: string | null }): string {
+/** 1 → "1st", 22 → "22nd", -1 → "last day". */
+export function ordinalDay(n: number): string {
+  if (n === -1) return "last day";
+  const s = n % 100 >= 11 && n % 100 <= 13 ? "th" : ["th", "st", "nd", "rd"][n % 10] ?? "th";
+  return n + s;
+}
+
+export function scheduleText(duty: { days: number[]; onceDate: string | null; monthDay: number | null }): string {
   if (duty.onceDate) return "One time · " + fmtDay(duty.onceDate);
+  if (duty.monthDay != null) return "Monthly · " + (duty.monthDay === -1 ? "last day of the month" : "the " + ordinalDay(duty.monthDay));
   const d = [...duty.days].sort().join();
   if (d === "0,1,2,3,4,5,6") return "Every day";
   if (d === "1,2,3,4,5") return "Weekdays";

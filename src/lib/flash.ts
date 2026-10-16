@@ -21,7 +21,7 @@ const MESSAGES: Record<string, { tone: "good" | "bad"; text: string }> = {
   "duty-resumed": { tone: "good", text: "Back on the daily list." },
   "duty-deleted": { tone: "good", text: "Deleted. Past days still show it." },
   "need-title": { tone: "bad", text: "Give the duty a name." },
-  "need-days": { tone: "bad", text: "Pick at least one day, or make it a one-time duty with a date." },
+  "need-days": { tone: "bad", text: "Pick at least one weekday, a day of the month, or a date." },
   "starter": { tone: "good", text: "Starter duties added. Edit or delete any of them." },
   "sent": { tone: "good", text: "Message sent." },
   "need-body": { tone: "bad", text: "Write something first." },

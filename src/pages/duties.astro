@@ -1,13 +1,14 @@
 ---
 import Shell from "../layouts/Shell.astro";
 import { prisma } from "../lib/db.ts";
-import { AREAS, WEEKDAYS, WEEK_ORDER, dayKey, fmtClock, scheduleText, sortDuties } from "../lib/days.ts";
+import { AREAS, WEEKDAYS, WEEK_ORDER, dayKey, fmtClock, ordinalDay, scheduleText, sortDuties } from "../lib/days.ts";
 
 const duties = (await prisma.duty.findMany()).sort(sortDuties);
 const editId = Astro.url.searchParams.get("edit");
 const editing = editId ? duties.find((d) => d.id === editId) ?? null : null;
 const showForm = Astro.url.searchParams.get("new") === "1" || !!editing;
-const f = editing ?? { id: "", title: "", details: "", area: "General", days: [1, 2, 3, 4, 5], onceDate: null as string | null, dueBy: "", priority: false };
+const f = editing ?? { id: "", title: "", details: "", area: "General", days: [1, 2, 3, 4, 5], onceDate: null as string | null, monthDay: null as number | null, dueBy: "", priority: false };
+const kind = f.onceDate ? "once" : f.monthDay != null ? "monthly" : "repeat";
 const groups = AREAS.concat(duties.map((d) => d.area).filter((a) => !AREAS.includes(a)))
   .map((a) => [a, duties.filter((d) => d.area === a)] as const)
   .filter(([, list]) => list.length);
@@ -38,14 +39,19 @@ const groups = AREAS.concat(duties.map((d) => d.area).filter((a) => !AREAS.inclu
         </div>
         <fieldset class="stack sched">
           <legend>Schedule</legend>
-          <label class="opt"><input type="radio" name="kind" value="repeat" checked={!f.onceDate} /> Repeats on</label>
+          <label class="opt"><input type="radio" name="kind" value="repeat" checked={kind === "repeat"} /> Repeats weekly on</label>
           <div class="days">
             {WEEK_ORDER.map((i) => (
               <label class="day"><input type="checkbox" name="days" value={i} checked={f.days.includes(i)} /><span>{WEEKDAYS[i]}</span></label>
             ))}
           </div>
-          <label class="opt"><input type="radio" name="kind" value="once" checked={!!f.onceDate} /> One time, on</label>
-          <input type="date" name="onceDate" value={f.onceDate ?? dayKey()} style="max-width:220px" aria-label="Date" />
+          <label class="opt"><input type="radio" name="kind" value="monthly" checked={kind === "monthly"} /> Once a month, on</label>
+          <select name="monthDay" aria-label="Day of the month" style="max-width:260px;margin-left:24px">
+            {Array.from({ length: 31 }, (_, i) => i + 1).map((n) => <option value={n} selected={f.monthDay === n}>The {ordinalDay(n)}{n > 28 ? " (or the last day in shorter months)" : ""}</option>)}
+            <option value="-1" selected={f.monthDay === -1}>The last day of the month</option>
+          </select>
+          <label class="opt"><input type="radio" name="kind" value="once" checked={kind === "once"} /> One time, on</label>
+          <input type="date" name="onceDate" value={f.onceDate ?? dayKey()} style="max-width:220px;margin-left:24px" aria-label="Date" />
         </fieldset>
         <label class="opt"><input type="checkbox" name="priority" checked={f.priority} /> Mark as priority</label>
         <div class="row">

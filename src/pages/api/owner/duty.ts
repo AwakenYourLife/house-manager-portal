@@ -11,10 +11,14 @@ export const POST: APIRoute = async ({ request, redirect }) => {
   const back = id ? `/duties?edit=${id}` : "/duties?new=1";
   if (!title) return redirect(`${back}&f=need-title#form`);
 
-  const once = form.get("kind") === "once";
+  const kind = field(form.get("kind"), 10);
+  const once = kind === "once";
+  const monthly = kind === "monthly";
   const onceDate = field(form.get("onceDate"), 10);
+  const md = Number(field(form.get("monthDay"), 3));
+  const monthDay = monthly && Number.isInteger(md) && (md === -1 || (md >= 1 && md <= 31)) ? md : null;
   const days = [...new Set(form.getAll("days").map(Number).filter((n) => Number.isInteger(n) && n >= 0 && n <= 6))];
-  if (once ? !isDayKey(onceDate) : days.length === 0) return redirect(`${back}&f=need-days#form`);
+  if (once ? !isDayKey(onceDate) : monthly ? monthDay === null : days.length === 0) return redirect(`${back}&f=need-days#form`);
 
   const area = field(form.get("area"), 40);
   const dueBy = field(form.get("dueBy"), 5);
@@ -22,8 +26,9 @@ export const POST: APIRoute = async ({ request, redirect }) => {
     title,
     details: field(form.get("details"), 2000),
     area: AREAS.includes(area) ? area : "General",
-    days: once ? [] : days.sort(),
+    days: once || monthly ? [] : days.sort(),
     onceDate: once ? onceDate : null,
+    monthDay,
     dueBy: /^\d{2}:\d{2}$/.test(dueBy) ? dueBy : "",
     priority: form.get("priority") === "on",
   };
