@@ -13,12 +13,17 @@ export type Role = "owner" | "manager";
 export const COOKIE = "house_session";
 const MAX_AGE = 60 * 60 * 24 * 60; // two months: a phone stays signed in
 
+/**
+ * Trimmed, because a password pasted into Render's dashboard easily picks up a
+ * trailing space or line break, and then nothing typed on a phone ever matches.
+ */
 function passwordFor(role: Role): string | undefined {
-  return role === "owner" ? process.env.OWNER_PASSWORD : process.env.MANAGER_PASSWORD;
+  const p = role === "owner" ? process.env.OWNER_PASSWORD : process.env.MANAGER_PASSWORD;
+  return p?.trim() || undefined;
 }
 
 export function isConfigured(): boolean {
-  return Boolean(process.env.OWNER_PASSWORD && process.env.MANAGER_PASSWORD);
+  return Boolean(passwordFor("owner") && passwordFor("manager"));
 }
 
 /** Constant-time compare, so a wrong password can't be found a letter at a time. */
@@ -31,7 +36,7 @@ function same(a: string, b: string): boolean {
 export function roleForPassword(supplied: string): Role | null {
   for (const role of ["owner", "manager"] as const) {
     const p = passwordFor(role);
-    if (p && same(p, supplied ?? "")) return role;
+    if (p && same(p, (supplied ?? "").trim())) return role;
   }
   return null;
 }

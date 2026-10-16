@@ -12,13 +12,19 @@ export const GET: APIRoute = async () => {
   } catch (err) {
     error = err instanceof Error ? err.message : String(err);
   }
-  const owner = process.env.OWNER_PASSWORD, manager = process.env.MANAGER_PASSWORD;
+  const rawOwner = process.env.OWNER_PASSWORD ?? "", rawManager = process.env.MANAGER_PASSWORD ?? "";
+  const owner = rawOwner.trim(), manager = rawManager.trim();
   const body = {
     database,
     error,
     passwordsSet: Boolean(owner && manager),
     // Identical passwords would sign the manager in as the owner.
     passwordsDiffer: owner !== manager,
+    // Lengths only, never the passwords: enough to spot a password that was
+    // pasted with extra characters, without revealing anything about it.
+    ownerPasswordLength: owner.length,
+    managerPasswordLength: manager.length,
+    passwordsHadExtraSpaces: rawOwner !== owner || rawManager !== manager,
     timeZone: TZ,
     today: dayKey(),
     commit: process.env.RENDER_GIT_COMMIT?.slice(0, 7) ?? null,

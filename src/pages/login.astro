@@ -15,7 +15,7 @@ const next = Astro.url.searchParams.get("next") ?? "/today";
       <input type="hidden" name="next" value={next} />
       <div class="field">
         <label for="password">Password</label>
-        <input id="password" name="password" type="password" required autocomplete="current-password" autofocus />
+        <input id="password" name="password" type="password" required autocomplete="current-password" autocapitalize="off" autocorrect="off" spellcheck="false" autofocus />
       </div>
       <button type="submit" class="primary">Sign in</button>
     </form>
