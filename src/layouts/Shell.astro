@@ -1,0 +1,194 @@
+---
+/**
+ * Every page's frame: header, tabs, the flash message, one global stylesheet.
+ *
+ * Text inputs are 16px on purpose: iPhone Safari zooms the page when a field
+ * is smaller, and the manager will mostly use this on a phone.
+ */
+import { flashFor } from "../lib/flash.ts";
+import { unreadFor } from "../lib/house.ts";
+import { dayKey, fmtDay } from "../lib/days.ts";
+
+interface Props {
+  title: string;
+  tab?: "today" | "duties" | "log" | "messages";
+}
+const { title, tab } = Astro.props;
+const role = Astro.locals.role;
+const flash = flashFor(Astro.url.searchParams.get("f"));
+const unread = role ? await unreadFor(role) : 0;
+
+const tabs = role === "owner"
+  ? [["today", "Today", "/today"], ["duties", "Duties", "/duties"], ["log", "Log", "/log"], ["messages", "Messages", "/messages"]]
+  : [["today", "Today", "/today"], ["log", "My log", "/log"], ["messages", "Messages", "/messages"]];
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="robots" content="noindex" />
+    <meta name="theme-color" content="#1E5B47" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <title>{title} · House Manager Portal</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=Figtree:wght@400;500;600&display=swap" />
+    <style is:global>
+      :root {
+        --bg: #F2F4F1; --surface: #FFFFFF; --sunk: #E9EDE9; --ink: #17221E; --muted: #5B6863; --line: #D8DFDA;
+        --accent: #1E5B47; --accent-ink: #FFFFFF; --accent-soft: #DFEDE6;
+        --brass: #8A6519; --brass-soft: #F4EBD7; --danger: #A33E2B; --danger-soft: #F6E2DC; --ok: #2B7349;
+        --display: "Bricolage Grotesque", "Avenir Next", system-ui, sans-serif;
+        --body: "Figtree", -apple-system, "Segoe UI", system-ui, sans-serif;
+        --mono: ui-monospace, "SF Mono", Menlo, monospace;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #101614; --surface: #18201D; --sunk: #141B18; --ink: #E4EBE7; --muted: #97A59F; --line: #2A3531;
+          --accent: #62BE9A; --accent-ink: #0B1712; --accent-soft: #1C362C;
+          --brass: #D8AE5C; --brass-soft: #352B16; --danger: #E88B76; --danger-soft: #3A211B; --ok: #6CC795;
+          color-scheme: dark;
+        }
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.5 var(--body);
+        -webkit-font-smoothing: antialiased;
+        padding: env(safe-area-inset-top, 0px) max(16px, env(safe-area-inset-right, 0px)) 64px max(16px, env(safe-area-inset-left, 0px));
+      }
+      .wrap { max-width: 760px; margin: 0 auto; }
+      h1, h2, h3 { font-family: var(--display); text-wrap: balance; margin: 0; line-height: 1.15; }
+      h2 { font-size: 1.35rem; }
+      h3 { font-size: 1.05rem; }
+      a { color: var(--accent); }
+      :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+      .muted { color: var(--muted); }
+      .small { font-size: .88rem; }
+      .mono, .num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+      .label { font-size: .72rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 600; }
+      .pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+
+      header.top { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 8px 16px; padding: 22px 0 14px; }
+      header.top h1 { font-size: 1.55rem; letter-spacing: -.01em; }
+      header.top .date { color: var(--muted); font-size: .92rem; }
+      header.top form { margin: 0; }
+
+      nav.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); margin-bottom: 22px; overflow-x: auto;
+        position: sticky; top: env(safe-area-inset-top, 0px); background: var(--bg); z-index: 5; }
+      nav.tabs a { padding: 10px 12px 9px; font-weight: 600; color: var(--muted); text-decoration: none;
+        border-bottom: 3px solid transparent; white-space: nowrap; display: flex; gap: 6px; align-items: center; }
+      nav.tabs a[aria-current="page"] { color: var(--ink); border-bottom-color: var(--accent); }
+      .badge { background: var(--danger); color: var(--surface); font-size: .7rem; border-radius: 99px; padding: 0 6px; line-height: 1.6; }
+
+      section { display: flex; flex-direction: column; gap: 14px; margin-bottom: 32px; }
+      .sec-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+      .card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px; }
+      .stack { display: flex; flex-direction: column; gap: 14px; }
+      .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+      .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+      @media (max-width: 560px) { .grid2 { grid-template-columns: 1fr; } }
+
+      .flash { border-radius: 8px; padding: 12px 14px; font-size: .95rem; margin-bottom: 18px; }
+      .flash-good { background: var(--accent-soft); color: var(--accent); }
+      .flash-bad, .banner { background: var(--danger-soft); color: var(--danger); }
+      .banner { border-radius: 8px; padding: 12px 14px; }
+      .callout { background: var(--brass-soft); border-radius: 10px; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px; }
+      .callout .label { color: var(--brass); }
+      .callout p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+      label { font-weight: 600; font-size: .9rem; }
+      .field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+      .hint { font-size: .85rem; color: var(--muted); font-weight: 400; }
+      input[type=text], input[type=password], input[type=date], input[type=time], textarea, select {
+        width: 100%; font: 16px var(--body); color: var(--ink); background: var(--surface);
+        border: 1px solid var(--line); border-radius: 8px; padding: 10px 11px;
+      }
+      textarea { min-height: 84px; resize: vertical; }
+
+      button, .btn {
+        font: 600 15px var(--body); min-height: 44px; padding: 0 16px; border-radius: 8px; cursor: pointer;
+        border: 1px solid var(--line); background: var(--surface); color: var(--ink);
+        display: inline-flex; align-items: center; justify-content: center; gap: 7px; text-decoration: none; line-height: 1;
+      }
+      button:hover, .btn:hover { border-color: var(--muted); }
+      button.primary, .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+      button.primary:hover { filter: brightness(1.07); }
+      button.danger { background: var(--danger); border-color: var(--danger); color: var(--surface); }
+      button.small, .btn.small { min-height: 36px; font-size: .86rem; padding: 0 12px; }
+      button.big { min-height: 56px; font-size: 1.1rem; padding: 0 26px; border-radius: 10px; }
+      button.link { background: none; border: 0; min-height: 0; padding: 4px 0; color: var(--accent); text-decoration: underline; text-underline-offset: 3px; font-size: .9rem; }
+      button[disabled] { opacity: .55; cursor: not-allowed; }
+
+      .chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 99px; font-size: .78rem;
+        font-weight: 600; background: var(--sunk); color: var(--muted); white-space: nowrap; }
+      .chip.ok { background: var(--accent-soft); color: var(--accent); }
+      .chip.warn { background: var(--brass-soft); color: var(--brass); }
+      .chip.bad { background: var(--danger-soft); color: var(--danger); }
+      .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+
+      .stats { display: flex; gap: 28px; flex-wrap: wrap; }
+      .stats .n { font-family: var(--mono); font-size: 1.5rem; font-variant-numeric: tabular-nums; }
+      .meter { height: 6px; background: var(--sunk); border-radius: 99px; overflow: hidden; }
+      .meter i { display: block; height: 100%; background: var(--accent); border-radius: 99px; }
+
+      .empty { padding: 22px; border: 1px dashed var(--line); border-radius: 10px; color: var(--muted); display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
+      .empty b { color: var(--ink); }
+
+      dl.kv { display: grid; grid-template-columns: 160px 1fr; gap: 6px 14px; margin: 0; }
+      dl.kv dt { color: var(--muted); font-size: .88rem; }
+      dl.kv dd { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+      @media (max-width: 480px) { dl.kv { grid-template-columns: 1fr; } dl.kv dd { margin-bottom: 8px; } }
+
+      details.more > summary { cursor: pointer; color: var(--accent); font-weight: 600; font-size: .9rem; list-style: none; }
+      details.more > summary::-webkit-details-marker { display: none; }
+      footer.page { margin-top: 36px; font-size: .85rem; color: var(--muted); }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header class="top">
+        <div>
+          <h1>House Manager Portal</h1>
+          <div class="date">{fmtDay(dayKey(), true)}</div>
+        </div>
+        {role && (
+          <form method="post" action="/api/logout" class="row">
+            <span class={"chip " + (role === "owner" ? "ok" : "")}>{role === "owner" ? "Owner" : "House manager"}</span>
+            <button type="submit" class="link">Sign out</button>
+          </form>
+        )}
+      </header>
+      {role && tab && (
+        <nav class="tabs">
+          {tabs.map(([key, label, href]) => (
+            <a href={href} aria-current={tab === key ? "page" : undefined}>
+              {label}
+              {key === "messages" && unread > 0 && tab !== "messages" && <span class="badge">{unread}</span>}
+            </a>
+          ))}
+        </nav>
+      )}
+      {flash && <div class={"flash flash-" + flash.tone} role="status">{flash.text}</div>}
+      <slot />
+    </div>
+
+    <script is:inline>
+      // A button that still looks pressable invites a second tap, and a second
+      // "Clock in" would open a second shift.
+      document.addEventListener("submit", function (e) {
+        var form = e.target;
+        if (form.dataset.sending === "1") { e.preventDefault(); return; }
+        form.dataset.sending = "1";
+        form.querySelectorAll("button").forEach(function (b) { setTimeout(function () { b.disabled = true; }, 0); });
+      });
+      // Running timers ("3h 12m on the clock") tick without a reload.
+      setInterval(function () {
+        document.querySelectorAll("[data-since]").forEach(function (el) {
+          var ms = Number(el.dataset.base) + (Date.now() - Number(el.dataset.since));
+          var m = Math.max(0, Math.round(ms / 60000));
+          el.textContent = Math.floor(m / 60) + "h " + String(m % 60).padStart(2, "0") + "m";
+        });
+      }, 20000);
+    </script>
+  </body>
+</html>

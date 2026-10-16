@@ -1,0 +1,12 @@
+---
+import type { Day } from "../generated/prisma/client.js";
+import { fmtTime } from "../lib/days.ts";
+interface Props { day: Day }
+const { day } = Astro.props;
+---
+<dl class="kv">
+  <dt>What they did</dt><dd>{day.reportDid || "—"}</dd>
+  {day.reportExtra && <><dt>Extra things handled</dt><dd>{day.reportExtra}</dd></>}
+  {day.reportIssues && <><dt>Issues &amp; needs</dt><dd>{day.reportIssues}</dd></>}
+  <dt>Sent</dt><dd class="mono">{fmtTime(day.reportAt)}{day.reportEditedAt && ` · edited ${fmtTime(day.reportEditedAt)}`}</dd>
+</dl>

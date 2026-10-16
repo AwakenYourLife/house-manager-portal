@@ -1,0 +1,62 @@
+---
+import Shell from "../layouts/Shell.astro";
+import { prisma } from "../lib/db.ts";
+import { dayKey, fmtDay, fmtTime } from "../lib/days.ts";
+
+const role = Astro.locals.role!;
+const other = role === "owner" ? "manager" : "owner";
+// Opening this page is what counts as reading — the other person sees "Read".
+await prisma.message.updateMany({ where: { from: other, readAt: null }, data: { readAt: new Date() } });
+const msgs = (await prisma.message.findMany({ orderBy: { createdAt: "desc" }, take: 200 })).reverse();
+const today = dayKey();
+let last = "";
+---
+<Shell title="Messages" tab="messages">
+  <section>
+    <div class="sec-head"><h2>Messages</h2><span class="muted small">Between the owner and the house manager</span></div>
+    <div class="card stack">
+      <div class="thread" id="thread">
+        {msgs.length === 0 && <div class="muted">No messages yet. Use this for questions, schedule changes and anything that doesn't fit a duty.</div>}
+        {msgs.map((m) => {
+          const k = dayKey(m.createdAt);
+          const sep = k !== last ? (last = k, <div class="sep">{k === today ? "Today" : fmtDay(k)}</div>) : null;
+          const mine = m.from === role;
+          return (
+            <>
+              {sep}
+              <div class:list={["msg", { mine }]}>
+                <div class="bub">{m.body}</div>
+                <div class="by">
+                  {mine ? "You" : m.from === "owner" ? "Owner" : "House manager"} · {fmtTime(m.createdAt)}
+                  {mine && (m.readAt ? ` · Read ${fmtTime(m.readAt)}` : " · Not read yet")}
+                </div>
+              </div>
+            </>
+          );
+        })}
+      </div>
+      <form method="post" action="/api/message" class="composer">
+        <textarea name="body" required maxlength="4000" placeholder="Write a message…" aria-label="Message" id="body"></textarea>
+        <button class="primary">Send</button>
+      </form>
+    </div>
+  </section>
+</Shell>
+<script is:inline>
+  var t = document.getElementById("thread"); if (t) t.scrollTop = t.scrollHeight;
+  var b = document.getElementById("body");
+  if (b) b.addEventListener("keydown", function (e) {
+    if (e.key === "Enter" && !e.shiftKey && !("ontouchstart" in window)) { e.preventDefault(); if (b.value.trim()) b.form.requestSubmit(); }
+  });
+</script>
+<style>
+  .thread { display: flex; flex-direction: column; gap: 10px; max-height: min(62vh, 600px); overflow-y: auto; padding: 2px; }
+  .msg { max-width: 82%; display: flex; flex-direction: column; gap: 2px; }
+  .bub { padding: 9px 13px; border-radius: 14px; background: var(--sunk); white-space: pre-wrap; overflow-wrap: anywhere; }
+  .msg.mine { align-self: flex-end; align-items: flex-end; }
+  .msg.mine .bub { background: var(--accent); color: var(--accent-ink); }
+  .by { font-size: .76rem; color: var(--muted); }
+  .sep { align-self: center; font-size: .76rem; color: var(--muted); padding: 6px 0; }
+  .composer { display: flex; gap: 8px; align-items: flex-end; margin: 0; }
+  .composer textarea { min-height: 48px; }
+</style>

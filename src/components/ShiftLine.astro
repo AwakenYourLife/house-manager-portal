@@ -1,0 +1,14 @@
+---
+import type { Shift } from "../generated/prisma/client.js";
+import { fmtTime } from "../lib/days.ts";
+interface Props { shifts: Shift[] }
+const { shifts } = Astro.props;
+---
+<div class="shifts">
+  {shifts.length === 0 ? <span>No clock-in</span> : shifts.map((s) => (
+    <span class="mono">{fmtTime(s.clockIn)} – {s.clockOut ? fmtTime(s.clockOut) : "still on"}{s.editedByOwner && " (corrected)"}</span>
+  ))}
+</div>
+<style>
+  .shifts { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: .9rem; color: var(--muted); }
+</style>

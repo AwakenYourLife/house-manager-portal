@@ -1,0 +1,102 @@
+// The house manager portal.
+//
+// Its own database. A "day" is a calendar date in the household's time zone
+// (HOUSE_TZ), stored as "YYYY-MM-DD" text so the owner and the manager can never
+// disagree about which day something belongs to.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+/// One job on the manager's list — "Unload the dishwasher".
+model Duty {
+  id        String   @id @default(cuid())
+  title     String
+  details   String   @default("")
+  area      String   @default("General")
+  /// Weekdays it repeats on, 0 = Sunday … 6 = Saturday. Empty for a one-off.
+  days      Int[]    @default([])
+  /// Set for a one-time duty: the only date it is due.
+  onceDate  String?
+  /// "HH:MM" it should be done by, or blank.
+  dueBy     String   @default("")
+  priority  Boolean  @default(false)
+  /// Paused duties drop off the daily list but keep their history.
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  completions Completion[]
+}
+
+/// Everything about one working day that isn't a shift or a tick.
+model Day {
+  date String @id
+
+  /// The owner's note shown at the top of the manager's screen that day.
+  ownerNote String @default("")
+
+  reportDid      String    @default("")
+  reportExtra    String    @default("")
+  reportIssues   String    @default("")
+  reportAt       DateTime?
+  reportEditedAt DateTime?
+  /// The duties that were due when the report went in — [{dutyId, title}].
+  /// Frozen so that editing the duty list later never rewrites a past day.
+  dueSnapshot    Json?
+
+  reviewNote String    @default("")
+  reviewedAt DateTime?
+
+  updatedAt DateTime @updatedAt
+}
+
+/// One clock-in to clock-out. clockOut is null while they're on the clock.
+model Shift {
+  id       String    @id @default(cuid())
+  date     String
+  clockIn  DateTime
+  clockOut DateTime?
+  /// Set when the owner corrects a time, so a fixed shift is never mistaken
+  /// for one the manager clocked themselves.
+  editedByOwner Boolean @default(false)
+
+  @@index([date])
+  @@index([clockOut])
+}
+
+/// A duty's state on one day: ticked or not, the manager's note, and — if it
+/// wasn't done — the reason they gave in the end-of-day report.
+model Completion {
+  id     String  @id @default(cuid())
+  date   String
+  dutyId String?
+  duty   Duty?   @relation(fields: [dutyId], references: [id], onDelete: SetNull)
+  /// Copied from the duty, so the log still reads right after a duty is deleted.
+  title  String
+
+  done   Boolean   @default(false)
+  doneAt DateTime?
+  note   String    @default("")
+  reason String    @default("")
+
+  @@unique([date, dutyId])
+  @@index([date])
+}
+
+/// The conversation between the owner and the manager.
+model Message {
+  id        String    @id @default(cuid())
+  /// "owner" | "manager"
+  from      String
+  body      String
+  createdAt DateTime  @default(now())
+  /// When the other person first opened Messages after it arrived.
+  readAt    DateTime?
+
+  @@index([createdAt])
+}

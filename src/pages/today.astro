@@ -1,0 +1,169 @@
+---
+import Shell from "../layouts/Shell.astro";
+import Checklist from "../components/Checklist.astro";
+import Report from "../components/Report.astro";
+import ShiftLine from "../components/ShiftLine.astro";
+import { dayKey, fmtDay, fmtDur, fmtTime } from "../lib/days.ts";
+import { loadDay, staleShift } from "../lib/house.ts";
+import { prisma } from "../lib/db.ts";
+
+const role = Astro.locals.role!;
+const key = dayKey();
+const d = await loadDay(key);
+const stale = await staleShift();
+const day = d.day;
+const editing = Astro.url.searchParams.get("edit") === "1" || !day?.reportAt;
+const undone = d.items.filter((i) => !i.c?.done);
+const pct = d.total ? Math.round((d.done / d.total) * 100) : 0;
+const hasDuties = role === "owner" ? (await prisma.duty.count()) > 0 : true;
+// What the live timer adds to: everything worked today except the open shift.
+const base = d.openShift ? d.worked - (Date.now() - d.openShift.clockIn.getTime()) : 0;
+---
+<Shell title="Today" tab="today">
+  {stale && (
+    <div class="banner" style="margin-bottom:18px">
+      {role === "manager"
+        ? <>You're still clocked in from {fmtDay(stale.date)} ({fmtTime(stale.clockIn)}). Clocking out now would count every hour since, so message the owner your real finish time and they'll correct it.</>
+        : <>The manager never clocked out on {fmtDay(stale.date)}. <a href={"/log/" + stale.date}>Correct that shift</a>.</>}
+    </div>
+  )}
+
+  {role === "manager" ? (
+    <>
+      {day?.ownerNote && <div class="callout" style="margin-bottom:22px"><div class="label">Note for today</div><p>{day.ownerNote}</p></div>}
+
+      <section>
+        <div class="card clock">
+          <div>
+            {d.openShift ? (
+              <>
+                <div class="label">Clocked in at {fmtTime(d.openShift.clockIn)}</div>
+                <div class="big num" data-since={d.openShift.clockIn.getTime()} data-base={base}>{fmtDur(d.worked)}</div>
+                <div class="muted small">on the clock today</div>
+              </>
+            ) : d.shifts.length ? (
+              <><div class="status">Clocked out</div><div class="muted">{fmtDur(d.worked)} worked today</div></>
+            ) : (
+              <><div class="status">Not clocked in</div><div class="muted">Clock in when you start your day.</div></>
+            )}
+          </div>
+          <form method="post" action="/api/manager/clock">
+            {d.openShift
+              ? <><input type="hidden" name="action" value="out" /><button class="big">Clock out</button></>
+              : <><input type="hidden" name="action" value="in" /><button class="big primary">{d.shifts.length ? "Clock back in" : "Clock in"}</button></>}
+          </form>
+          {d.shifts.length > 0 && <div style="grid-column:1/-1"><ShiftLine shifts={d.shifts} /></div>}
+        </div>
+      </section>
+
+      <section>
+        <div class="sec-head"><h2>Today's duties</h2><span class="muted num">{d.done} of {d.total} done</span></div>
+        <div class="meter"><i style={`width:${pct}%`}></i></div>
+        <Checklist d={d} editable emptyText="No duties scheduled for today.">
+          <span slot="empty">Check Messages for anything the owner has asked for.</span>
+        </Checklist>
+      </section>
+
+      <section id="report">
+        <div class="sec-head">
+          <h2>End-of-day report</h2>
+          {day?.reportAt && <span class="chip ok"><span class="dot"></span>Sent {fmtTime(day.reportAt)}</span>}
+        </div>
+        {!editing && day ? (
+          <>
+            <Report day={day} />
+            <div class="row"><a class="btn" href="/today?edit=1#report">Edit report</a></div>
+            {day.reviewNote && <div class="callout"><div class="label">Reply from the owner</div><p>{day.reviewNote}</p></div>}
+            {day.reviewedAt && !day.reviewNote && <span class="chip ok">Reviewed by the owner</span>}
+          </>
+        ) : (
+          <form method="post" action="/api/manager/report" class="card stack">
+            <div class="field">
+              <label for="did">What I did today</label>
+              <textarea id="did" name="did" required maxlength="6000" placeholder="Duties finished, anything that took longer than usual…">{day?.reportDid}</textarea>
+            </div>
+            <div class="field">
+              <label for="extra">Extra things I handled <span class="hint">(optional)</span></label>
+              <textarea id="extra" name="extra" maxlength="4000" placeholder="Deliveries, repairs, anything not on the list">{day?.reportExtra}</textarea>
+            </div>
+            <div class="field">
+              <label for="issues">Issues, supplies needed or questions <span class="hint">(optional)</span></label>
+              <textarea id="issues" name="issues" maxlength="4000" placeholder="We're low on dish soap. The back gate latch is sticking.">{day?.reportIssues}</textarea>
+            </div>
+            {undone.length > 0 && (
+              <fieldset class="stack" style="border:0;padding:0;margin:0">
+                <legend style="font-weight:600;font-size:.9rem;margin-bottom:8px">Unchecked duties need a reason</legend>
+                {undone.map((i) => (
+                  <div class="field">
+                    <label for={"why-" + (i.dutyId ?? i.title)} class="hint">{i.title}</label>
+                    <input type="text" id={"why-" + (i.dutyId ?? i.title)} name={"why:" + (i.dutyId ?? "")} required maxlength="600"
+                      value={i.c?.reason ?? ""} placeholder="Why it wasn't done, or when it will be" />
+                  </div>
+                ))}
+              </fieldset>
+            )}
+            <div class="row">
+              <button type="submit" class="primary">{d.openShift ? "Send report and clock out" : "Send report"}</button>
+              {day?.reportAt && <a class="btn" href="/today#report">Cancel</a>}
+            </div>
+          </form>
+        )}
+      </section>
+    </>
+  ) : (
+    <>
+      <section>
+        <div class="stats">
+          <div><div class="label">Hours today</div><div class="n" data-since={d.openShift?.clockIn.getTime()} data-base={d.openShift ? base : undefined}>{fmtDur(d.worked)}</div></div>
+          <div><div class="label">Duties done</div><div class="n">{d.done}/{d.total}</div></div>
+          <div><div class="label">Report</div><div style="padding-top:8px">{day?.reportAt ? <span class="chip ok">Sent {fmtTime(day.reportAt)}</span> : <span class="chip">Not yet</span>}</div></div>
+        </div>
+        <div class="row">
+          {d.openShift
+            ? <span class="chip ok"><span class="dot"></span>On the clock since {fmtTime(d.openShift.clockIn)}</span>
+            : d.shifts.length
+              ? <span class="chip">Clocked out · {fmtDur(d.worked)}</span>
+              : <span class="chip warn">Not clocked in yet</span>}
+        </div>
+      </section>
+
+      <section>
+        <h2>Note for today</h2>
+        <form method="post" action="/api/owner/day-note" class="stack">
+          <div class="field">
+            <label for="note" class="hint">Shows at the top of the manager's screen today.</label>
+            <textarea id="note" name="note" maxlength="4000" placeholder="Guests arrive at 6. Please set up the guest room first.">{day?.ownerNote}</textarea>
+          </div>
+          <div class="row"><button class="primary">Post note</button></div>
+        </form>
+      </section>
+
+      <section>
+        <div class="sec-head"><h2>Today's duties</h2><span class="muted num">{d.done} of {d.total} done</span></div>
+        <div class="meter"><i style={`width:${pct}%`}></i></div>
+        <Checklist d={d} emptyText="No duties scheduled for today.">
+          <span slot="empty">
+            {hasDuties ? "Nothing on the list repeats today." : "Add the jobs your house manager handles and pick the days they repeat."}{" "}
+            <a href="/duties">Go to Duties</a>
+          </span>
+        </Checklist>
+      </section>
+
+      {day?.reportAt && (
+        <section>
+          <h2>End-of-day report</h2>
+          <Report day={day} />
+          <a href={"/log/" + key}>{day.reviewedAt ? "Edit your reply" : "Reply and mark reviewed"}</a>
+        </section>
+      )}
+    </>
+  )}
+</Shell>
+
+<style>
+  .clock { display: grid; grid-template-columns: 1fr auto; gap: 16px; align-items: center; }
+  @media (max-width: 480px) { .clock { grid-template-columns: 1fr; } .clock form button { width: 100%; } }
+  .clock .status { font-family: var(--display); font-size: 1.3rem; font-weight: 700; }
+  .clock .big { font-size: 2rem; line-height: 1.1; }
+  .clock form { margin: 0; }
+</style>

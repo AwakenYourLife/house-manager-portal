@@ -1,0 +1,40 @@
+# Render Blueprint for the house manager portal.
+#
+# Pointing Render at this repository creates the service from here, so nothing
+# is typed into a form from memory.
+services:
+  - type: web
+    name: house-manager-portal
+    runtime: node
+    region: ohio
+    branch: main
+
+    # Always on. The free tier sleeps after ~15 quiet minutes and the next
+    # visitor waits ~50 seconds — a manager trying to clock in at 8am would
+    # read that as the site being down.
+    plan: starter
+
+    # src/generated/prisma is not committed, so the client is generated here.
+    buildCommand: npm ci && npx prisma generate && npm run build
+    # Applies any new database migrations before each deploy goes live, so a
+    # schema change ships with the code and nobody runs it by hand with the
+    # production password. A failed migration stops the deploy; the old
+    # version keeps serving.
+    preDeployCommand: npx prisma migrate deploy
+    startCommand: node dist/server/entry.mjs
+    healthCheckPath: /api/health
+
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: HOST
+        value: 0.0.0.0
+      - key: HOUSE_TZ
+        value: America/New_York
+      # Secrets: Render asks for each when the service is created.
+      - key: DATABASE_URL
+        sync: false
+      - key: OWNER_PASSWORD
+        sync: false
+      - key: MANAGER_PASSWORD
+        sync: false

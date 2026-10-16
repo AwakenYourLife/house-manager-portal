@@ -1,0 +1,89 @@
+---
+/**
+ * The day's duties, grouped by area. The manager's copy (editable) ticks and
+ * takes notes; everyone else sees the same list read-only, with when each was
+ * done and, for anything left undone, the reason given.
+ */
+import type { LoadedDay } from "../lib/house.ts";
+import { byArea } from "../lib/house.ts";
+import { fmtClock, fmtTime } from "../lib/days.ts";
+
+interface Props { d: LoadedDay; editable?: boolean; emptyText?: string }
+const { d, editable = false, emptyText = "No duties scheduled." } = Astro.props;
+const groups = byArea(d.items);
+---
+
+{d.items.length === 0 ? (
+  <div class="empty"><b>{emptyText}</b><slot name="empty" /></div>
+) : (
+  <div class="groups">
+    {groups.map(([area, items]) => (
+      <div class="area">
+        <div class="label">{area}</div>
+        {items.map((i) => {
+          const done = !!i.c?.done;
+          const canTick = editable && i.dutyId;
+          return (
+            <div class:list={["task", { done }]} id={i.dutyId ? "d-" + i.dutyId : undefined}>
+              {canTick ? (
+                <form method="post" action="/api/manager/tick">
+                  <input type="hidden" name="dutyId" value={i.dutyId} />
+                  <button class="tick" aria-pressed={done ? "true" : "false"} aria-label={(done ? "Mark not done: " : "Mark done: ") + i.title}>
+                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l3.2 3L13 4.5" /></svg>
+                  </button>
+                </form>
+              ) : (
+                <span class="tick" aria-hidden="true">
+                  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l3.2 3L13 4.5" /></svg>
+                </span>
+              )}
+              <div class="body">
+                <div class="t">{i.title}</div>
+                <div class="meta">
+                  {i.duty?.priority && <span class="prio">Priority</span>}
+                  {i.duty?.dueBy && <span>By {fmtClock(i.duty.dueBy)}</span>}
+                  {done && i.c?.doneAt && <span>Done {fmtTime(i.c.doneAt)}</span>}
+                  {!editable && !done && <span class="miss">Not done</span>}
+                </div>
+                {i.duty?.details && <div class="details">{i.duty.details}</div>}
+                {canTick ? (
+                  <form method="post" action="/api/manager/note" class="noteform">
+                    <input type="hidden" name="dutyId" value={i.dutyId} />
+                    <input type="text" name="note" value={i.c?.note ?? ""} placeholder="Add a note (optional)" aria-label={"Note for " + i.title} maxlength="600" />
+                    <button class="small">Save</button>
+                  </form>
+                ) : (
+                  i.c?.note && <div class="note"><b>Note:</b> {i.c.note}</div>
+                )}
+                {!done && i.c?.reason && <div class="note"><b>Why not done:</b> {i.c.reason}</div>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    ))}
+  </div>
+)}
+
+<style>
+  .groups { display: flex; flex-direction: column; gap: 18px; }
+  .area > .label { padding-bottom: 6px; }
+  .task { display: grid; grid-template-columns: auto 1fr; gap: 12px; padding: 12px 0; border-top: 1px solid var(--line); }
+  .area .task:last-child { border-bottom: 1px solid var(--line); }
+  form { margin: 0; }
+  .tick { width: 32px; height: 32px; min-height: 0; padding: 0; border-radius: 8px; border: 2px solid var(--line);
+    background: var(--surface); color: var(--accent-ink); display: grid; place-items: center; }
+  .tick svg { width: 18px; height: 18px; opacity: 0; }
+  .done .tick { background: var(--accent); border-color: var(--accent); }
+  .done .tick svg { opacity: 1; }
+  .body { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .t { font-weight: 600; overflow-wrap: anywhere; padding-top: 4px; }
+  .done .t { color: var(--muted); text-decoration: line-through; text-decoration-color: var(--line); }
+  .meta { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: .84rem; color: var(--muted); }
+  .meta:empty { display: none; }
+  .prio, .miss { color: var(--danger); font-weight: 600; }
+  .details { font-size: .9rem; color: var(--muted); white-space: pre-wrap; }
+  .note { font-size: .9rem; background: var(--sunk); border-radius: 6px; padding: 6px 9px; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .noteform { display: flex; gap: 6px; }
+  .noteform input { padding: 7px 10px; font-size: 15px; }
+</style>

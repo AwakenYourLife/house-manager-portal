@@ -1,0 +1,70 @@
+---
+import Shell from "../../layouts/Shell.astro";
+import Checklist from "../../components/Checklist.astro";
+import Report from "../../components/Report.astro";
+import ShiftLine from "../../components/ShiftLine.astro";
+import { dayKey, fmtDay, fmtDur, fmtTime, hhmm, isDayKey } from "../../lib/days.ts";
+import { loadDay } from "../../lib/house.ts";
+
+const key = Astro.params.date ?? "";
+if (!isDayKey(key)) return Astro.redirect("/log");
+const role = Astro.locals.role!;
+const d = await loadDay(key);
+const day = d.day;
+---
+<Shell title={fmtDay(key)} tab="log">
+  <p style="margin:0 0 10px"><a href="/log">← Back to the log</a></p>
+  <section>
+    <div class="sec-head">
+      <h2>{key === dayKey() ? "Today" : fmtDay(key, true)}</h2>
+      <span class="muted num">{fmtDur(d.worked)} · {d.done} of {d.total} done</span>
+    </div>
+    {day?.ownerNote && <div class="callout"><div class="label">Note for the day</div><p>{day.ownerNote}</p></div>}
+  </section>
+
+  <section>
+    <h3>Time</h3>
+    <ShiftLine shifts={d.shifts} />
+    {role === "owner" && d.shifts.length > 0 && (
+      <details class="more">
+        <summary>Correct a time</summary>
+        <div class="stack" style="margin-top:12px">
+          {d.shifts.map((s) => (
+            <form method="post" action="/api/owner/shift" class="row">
+              <input type="hidden" name="id" value={s.id} />
+              <label class="hint" for={"in-" + s.id}>In</label>
+              <input type="time" id={"in-" + s.id} name="in" value={hhmm(s.clockIn)} required style="width:auto" />
+              <label class="hint" for={"out-" + s.id}>Out</label>
+              <input type="time" id={"out-" + s.id} name="out" value={hhmm(s.clockOut)} style="width:auto" />
+              <button class="small">Save</button>
+            </form>
+          ))}
+          <p class="hint" style="margin:0">Times are for {fmtDay(key)}. Leave Out empty if they're still on the clock. A corrected shift is marked as corrected in the log.</p>
+        </div>
+      </details>
+    )}
+  </section>
+
+  <section>
+    <h3>Duties</h3>
+    <Checklist d={d} emptyText="No duties were scheduled." />
+  </section>
+
+  <section>
+    <h3>End-of-day report</h3>
+    {day?.reportAt ? <Report day={day} /> : <p class="muted" style="margin:0">No report was sent.</p>}
+    {role === "owner" && day?.reportAt && (
+      <form method="post" action="/api/owner/review" class="stack">
+        <input type="hidden" name="date" value={key} />
+        <div class="field">
+          <label for="review">Your reply {day.reviewedAt && <span class="chip ok" style="margin-left:6px">Reviewed {fmtTime(day.reviewedAt)}</span>}</label>
+          <textarea id="review" name="review" maxlength="4000" placeholder="Thanks! Next time please also…">{day.reviewNote}</textarea>
+          <span class="hint">The manager sees this under their report.</span>
+        </div>
+        <div class="row"><button class="primary">{day.reviewedAt ? "Update reply" : "Mark reviewed"}</button></div>
+      </form>
+    )}
+    {role === "manager" && day?.reviewNote && <div class="callout"><div class="label">Reply from the owner</div><p>{day.reviewNote}</p></div>}
+    {role === "manager" && day?.reviewedAt && !day.reviewNote && <span class="chip ok">Reviewed by the owner</span>}
+  </section>
+</Shell>

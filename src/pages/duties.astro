@@ -1,0 +1,130 @@
+---
+import Shell from "../layouts/Shell.astro";
+import { prisma } from "../lib/db.ts";
+import { AREAS, WEEKDAYS, WEEK_ORDER, dayKey, fmtClock, scheduleText, sortDuties } from "../lib/days.ts";
+
+const duties = (await prisma.duty.findMany()).sort(sortDuties);
+const editId = Astro.url.searchParams.get("edit");
+const editing = editId ? duties.find((d) => d.id === editId) ?? null : null;
+const showForm = Astro.url.searchParams.get("new") === "1" || !!editing;
+const f = editing ?? { id: "", title: "", details: "", area: "General", days: [1, 2, 3, 4, 5], onceDate: null as string | null, dueBy: "", priority: false };
+const groups = AREAS.concat(duties.map((d) => d.area).filter((a) => !AREAS.includes(a)))
+  .map((a) => [a, duties.filter((d) => d.area === a)] as const)
+  .filter(([, list]) => list.length);
+---
+<Shell title="Duties" tab="duties">
+  {showForm && (
+    <section>
+      <form method="post" action="/api/owner/duty" class="card stack" id="form">
+        <h2>{editing ? "Edit duty" : "New duty"}</h2>
+        <input type="hidden" name="id" value={f.id} />
+        <div class="field">
+          <label for="title">Duty</label>
+          <input type="text" id="title" name="title" required maxlength="200" value={f.title} placeholder="Change sheets in the primary bedroom" autofocus />
+        </div>
+        <div class="field">
+          <label for="details">Details <span class="hint">(optional)</span></label>
+          <textarea id="details" name="details" maxlength="2000" placeholder="Where things are, how you like it done">{f.details}</textarea>
+        </div>
+        <div class="grid2">
+          <div class="field">
+            <label for="area">Area</label>
+            <select id="area" name="area">{AREAS.map((a) => <option selected={a === f.area}>{a}</option>)}</select>
+          </div>
+          <div class="field">
+            <label for="dueBy">Done by <span class="hint">(optional)</span></label>
+            <input type="time" id="dueBy" name="dueBy" value={f.dueBy} />
+          </div>
+        </div>
+        <fieldset class="stack sched">
+          <legend>Schedule</legend>
+          <label class="opt"><input type="radio" name="kind" value="repeat" checked={!f.onceDate} /> Repeats on</label>
+          <div class="days">
+            {WEEK_ORDER.map((i) => (
+              <label class="day"><input type="checkbox" name="days" value={i} checked={f.days.includes(i)} /><span>{WEEKDAYS[i]}</span></label>
+            ))}
+          </div>
+          <label class="opt"><input type="radio" name="kind" value="once" checked={!!f.onceDate} /> One time, on</label>
+          <input type="date" name="onceDate" value={f.onceDate ?? dayKey()} style="max-width:220px" aria-label="Date" />
+        </fieldset>
+        <label class="opt"><input type="checkbox" name="priority" checked={f.priority} /> Mark as priority</label>
+        <div class="row">
+          <button class="primary">{editing ? "Save changes" : "Add duty"}</button>
+          <a class="btn" href="/duties">Cancel</a>
+        </div>
+      </form>
+    </section>
+  )}
+
+  <section>
+    <div class="sec-head">
+      <h2>Duties</h2>
+      {!showForm && <a class="btn primary" href="/duties?new=1#form">Add a duty</a>}
+    </div>
+    {duties.length === 0 ? (
+      <div class="empty">
+        <b>No duties yet.</b>
+        Add each job your house manager handles and pick the days it repeats. They'll see the right list each morning.
+        <div class="row">
+          <a class="btn primary" href="/duties?new=1#form">Add a duty</a>
+          <form method="post" action="/api/owner/starter"><button>Start with common duties</button></form>
+        </div>
+      </div>
+    ) : groups.map(([area, list]) => (
+      <div>
+        <div class="label" style="padding:8px 0 4px">{area}</div>
+        {list.map((t) => (
+          <div class:list={["duty", { paused: !t.active }]}>
+            <div class="info">
+              <div class="t">{t.title}</div>
+              <div class="muted small">
+                {scheduleText(t)}{t.dueBy && ` · by ${fmtClock(t.dueBy)}`}
+                {t.priority && <> · <span class="prio">Priority</span></>}
+                {!t.active && <> · <span class="chip">Paused</span></>}
+              </div>
+              {t.details && <div class="muted small pre">{t.details}</div>}
+            </div>
+            <div class="actions">
+              <a class="btn small" href={`/duties?edit=${t.id}#form`}>Edit</a>
+              <form method="post" action="/api/owner/duty-action">
+                <input type="hidden" name="id" value={t.id} />
+                <button class="small" name="action" value={t.active ? "pause" : "resume"}>{t.active ? "Pause" : "Resume"}</button>
+              </form>
+              <details class="del">
+                <summary class="btn small">Delete</summary>
+                <form method="post" action="/api/owner/duty-action">
+                  <input type="hidden" name="id" value={t.id} />
+                  <button class="small danger" name="action" value="delete">Yes, delete it</button>
+                </form>
+              </details>
+            </div>
+          </div>
+        ))}
+      </div>
+    ))}
+  </section>
+</Shell>
+
+<style>
+  fieldset.sched { border: 0; padding: 0; margin: 0; gap: 8px; }
+  fieldset.sched legend { font-weight: 600; font-size: .9rem; margin-bottom: 6px; padding: 0; }
+  label.opt { display: flex; gap: 8px; align-items: center; font-weight: 500; cursor: pointer; }
+  .days { display: flex; flex-wrap: wrap; gap: 6px; padding-left: 24px; }
+  .day { cursor: pointer; }
+  .day input { position: absolute; opacity: 0; pointer-events: none; }
+  .day span { display: inline-block; min-width: 48px; text-align: center; padding: 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); font-size: .88rem; }
+  .day input:checked + span { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  .day input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .duty { display: flex; justify-content: space-between; gap: 12px; padding: 12px 0; border-top: 1px solid var(--line); flex-wrap: wrap; }
+  .duty.paused .t { color: var(--muted); }
+  .info { flex: 1 1 260px; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .t { font-weight: 600; overflow-wrap: anywhere; }
+  .prio { color: var(--danger); font-weight: 600; }
+  .actions { display: flex; gap: 6px; align-items: flex-start; flex-wrap: wrap; }
+  .actions form { margin: 0; }
+  details.del { position: relative; }
+  details.del summary { list-style: none; }
+  details.del summary::-webkit-details-marker { display: none; }
+  details.del[open] summary { border-color: var(--danger); color: var(--danger); }
+  details.del form { margin-top: 6px; }
+</style>

@@ -1,0 +1,67 @@
+---
+import Shell from "../../layouts/Shell.astro";
+import { prisma } from "../../lib/db.ts";
+import { addDays, dayKey, fmtDay, fmtDur, weekdayOf } from "../../lib/days.ts";
+import { loadDay } from "../../lib/house.ts";
+
+const today = dayKey();
+const since = addDays(today, -59);
+const [days, shifts, completions] = await Promise.all([
+  prisma.day.findMany({ where: { date: { gte: since } }, select: { date: true } }),
+  prisma.shift.findMany({ where: { date: { gte: since } }, select: { date: true } }),
+  prisma.completion.findMany({ where: { date: { gte: since } }, select: { date: true } }),
+]);
+const keys = [...new Set([...days, ...shifts, ...completions].map((x) => x.date))].sort().reverse();
+const loaded = await Promise.all(keys.map((k) => loadDay(k)));
+
+const monday = addDays(today, -((weekdayOf(today) + 6) % 7));
+const week = loaded.filter((d) => d.key >= monday);
+const weekMs = week.reduce((ms, d) => ms + d.worked, 0);
+const worked = week.filter((d) => d.shifts.length).length;
+const reports = week.filter((d) => d.day?.reportAt).length;
+---
+<Shell title="Log" tab="log">
+  <section>
+    <div class="stats">
+      <div><div class="label">Hours this week</div><div class="n">{fmtDur(weekMs)}</div></div>
+      <div><div class="label">Days worked</div><div class="n">{worked}</div></div>
+      <div><div class="label">Reports sent</div><div class="n">{reports}/{worked}</div></div>
+    </div>
+    <p class="muted small" style="margin:0">Week starts Monday {fmtDay(monday)}.</p>
+  </section>
+
+  <section>
+    <h2>Daily log</h2>
+    {loaded.length === 0 ? (
+      <div class="empty"><b>Nothing logged yet.</b>Each workday appears here once the manager clocks in or checks off a duty.</div>
+    ) : (
+      <div class="days">
+        {loaded.map((d) => {
+          const past = d.key < today;
+          const allDone = d.total > 0 && d.done === d.total;
+          return (
+            <a class="dayrow" href={"/log/" + d.key}>
+              <span class="dname">{d.key === today ? "Today" : fmtDay(d.key)}</span>
+              <span class="chips">
+                <span class="chip num">{fmtDur(d.worked)}</span>
+                <span class:list={["chip num", { ok: allDone, bad: past && !allDone }]}>{d.done}/{d.total}</span>
+                {d.day?.reportAt
+                  ? (d.day.reviewedAt ? <span class="chip ok">Reviewed</span> : <span class="chip warn">Report in</span>)
+                  : past ? <span class="chip bad">No report</span> : d.openShift ? <span class="chip ok">On the clock</span> : null}
+              </span>
+            </a>
+          );
+        })}
+      </div>
+    )}
+  </section>
+</Shell>
+<style>
+  .days { display: flex; flex-direction: column; }
+  .dayrow { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 12px; align-items: center; padding: 13px 0;
+    border-top: 1px solid var(--line); color: var(--ink); text-decoration: none; }
+  .dayrow:last-child { border-bottom: 1px solid var(--line); }
+  .dayrow:hover .dname { text-decoration: underline; }
+  .dname { font-weight: 600; }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+</style>

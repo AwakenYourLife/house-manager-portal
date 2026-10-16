@@ -1,0 +1,25 @@
+{
+  "name": "house-manager-portal",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview"
+  },
+  "dependencies": {
+    "@astrojs/node": "^9.5.5",
+    "@prisma/adapter-pg": "^7.9.1",
+    "@prisma/client": "^7.9.1",
+    "astro": "^5.14.1",
+    "dotenv": "^17.4.2",
+    "pg": "^8.23.0",
+    "prisma": "^7.9.1"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.10",
+    "@types/pg": "^8.15.5",
+    "typescript": "^5.9.3"
+  }
+}

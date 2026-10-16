@@ -1,0 +1,24 @@
+---
+import Shell from "../layouts/Shell.astro";
+import { isConfigured } from "../lib/auth.ts";
+
+if (Astro.locals.role) return Astro.redirect("/today");
+const bad = Astro.url.searchParams.get("bad") === "1";
+const next = Astro.url.searchParams.get("next") ?? "/today";
+---
+<Shell title="Sign in">
+  <section style="max-width:420px">
+    <h2>Sign in</h2>
+    {!isConfigured() && <div class="banner">No passwords are set yet. Set OWNER_PASSWORD and MANAGER_PASSWORD and redeploy.</div>}
+    {bad && <div class="banner">That password didn't match. Try again.</div>}
+    <form method="post" action="/api/login" class="card stack">
+      <input type="hidden" name="next" value={next} />
+      <div class="field">
+        <label for="password">Password</label>
+        <input id="password" name="password" type="password" required autocomplete="current-password" autofocus />
+      </div>
+      <button type="submit" class="primary">Sign in</button>
+    </form>
+    <p class="muted small">You'll stay signed in on this device for two months.</p>
+  </section>
+</Shell>
