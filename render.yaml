@@ -16,11 +16,11 @@ services:
 
     # src/generated/prisma is not committed, so the client is generated here.
     buildCommand: npm ci && npx prisma generate && npm run build
-    # Applies any new database migrations before each deploy goes live, so a
-    # schema change ships with the code and nobody runs it by hand with the
-    # production password. A failed migration stops the deploy; the old
-    # version keeps serving.
-    preDeployCommand: npx prisma migrate deploy
+    # Migrations are NOT run here. A preDeployCommand running
+    # `prisma migrate deploy` failed on Render (exit 1) while the same command
+    # succeeded from a Mac against the same database, and a failed pre-deploy
+    # blocks every deploy. Same rule as the support console: apply migrations
+    # deliberately, from a machine, before pushing code that needs them.
     startCommand: node dist/server/entry.mjs
     healthCheckPath: /api/health
 

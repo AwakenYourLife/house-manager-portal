@@ -75,7 +75,12 @@ npm run dev
 - **Build** `npm ci && npx prisma generate && npm run build`
 - **Start** `node dist/server/entry.mjs`
 - `HOST=0.0.0.0` is required. **Do not set `PORT`**; Render supplies it.
-- **Migrations run on every deploy** (`preDeployCommand`), before the new version goes live. A failed migration stops the deploy and the old version keeps serving.
+- **Migrations are not run automatically.** The first one has been applied. After
+  a schema change, apply it from this folder before pushing:
+
+  ```
+  DATABASE_URL="<production url>" npx prisma migrate deploy
+  ```
 
 Changing `MANAGER_PASSWORD` in Render signs the manager out on every device and
 leaves the owner signed in, and the reverse for `OWNER_PASSWORD`.
