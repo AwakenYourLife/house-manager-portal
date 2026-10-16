@@ -11,7 +11,7 @@ import { dayKey, fmtDay } from "../lib/days.ts";
 
 interface Props {
   title: string;
-  tab?: "today" | "duties" | "log" | "messages";
+  tab?: "today" | "duties" | "kitchen" | "log" | "messages";
 }
 const { title, tab } = Astro.props;
 const role = Astro.locals.role;
@@ -19,8 +19,8 @@ const flash = flashFor(Astro.url.searchParams.get("f"));
 const unread = role ? await unreadFor(role) : 0;
 
 const tabs = role === "owner"
-  ? [["today", "Today", "/today"], ["duties", "Duties", "/duties"], ["log", "Log", "/log"], ["messages", "Messages", "/messages"]]
-  : [["today", "Today", "/today"], ["log", "My log", "/log"], ["messages", "Messages", "/messages"]];
+  ? [["today", "Today", "/today"], ["duties", "Duties", "/duties"], ["kitchen", "Kitchen", "/kitchen"], ["log", "Log", "/log"], ["messages", "Messages", "/messages"]]
+  : [["today", "Today", "/today"], ["kitchen", "Kitchen", "/kitchen"], ["log", "My log", "/log"], ["messages", "Messages", "/messages"]];
 ---
 
 <html lang="en">

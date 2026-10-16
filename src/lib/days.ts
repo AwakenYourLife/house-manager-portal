@@ -111,3 +111,18 @@ export function sortDuties(a: Sortable, b: Sortable): number {
     a.title.localeCompare(b.title)
   );
 }
+
+/** The Monday that starts the week a day falls in. */
+export function mondayOf(key: string): string {
+  return addDays(key, -((weekdayOf(key) + 6) % 7));
+}
+
+/** "Today 3:12 PM", "Yesterday 9:05 AM", "Wed 3:12 PM", or "Oct 3" further back. */
+export function fmtWhen(d: Date | null | undefined): string {
+  if (!d) return "";
+  const k = dayKey(d), today = dayKey();
+  if (k === today) return "Today " + fmtTime(d);
+  if (k === addDays(today, -1)) return "Yesterday " + fmtTime(d);
+  if (k > addDays(today, -7)) return fmtDay(k).split(",")[0] + " " + fmtTime(d);
+  return new Intl.DateTimeFormat("en-US", { timeZone: "UTC", month: "short", day: "numeric" }).format(new Date(k + "T12:00:00Z"));
+}

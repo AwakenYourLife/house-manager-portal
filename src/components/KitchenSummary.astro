@@ -1,0 +1,25 @@
+---
+/** One line on Today pointing at the Kitchen tab, with anything that needs attention. */
+import { dayKey, mondayOf } from "../lib/days.ts";
+import { kitchenSummary } from "../lib/kitchen.ts";
+const k = await kitchenSummary(mondayOf(dayKey()));
+const empty = k.prepTotal === 0 && k.groceries === 0 && k.below + k.at === 0;
+---
+{!empty && (
+  <a class="ks" href="/kitchen">
+    <span class="label">Kitchen</span>
+    <span class="row" style="gap:6px">
+      {k.prepTotal > 0 && <span class:list={["chip", { ok: k.prepDone === k.prepTotal }]}>Food prep {k.prepDone}/{k.prepTotal}</span>}
+      {k.groceries > 0 && <span class="chip">{k.groceries} on the grocery list</span>}
+      {k.below > 0 && <span class="chip bad">{k.below} staple{k.below === 1 ? "" : "s"} below minimum</span>}
+      {k.at > 0 && <span class="chip warn">{k.at} at minimum</span>}
+    </span>
+    <span class="go">Open →</span>
+  </a>
+)}
+<style>
+  .ks { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 12px 14px; margin-bottom: 22px;
+    border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); text-decoration: none; }
+  .ks:hover { border-color: var(--muted); }
+  .go { margin-left: auto; color: var(--accent); font-weight: 600; font-size: .9rem; }
+</style>

@@ -1,0 +1,377 @@
+---
+/**
+ * Food prep for the week, the running grocery list, and the pantry staples
+ * that must never drop below their minimum — one page, because they feed each
+ * other: a staple running low lands on the grocery list, and checking it off
+ * there puts the count back up.
+ */
+import Shell from "../layouts/Shell.astro";
+import { prisma } from "../lib/db.ts";
+import { WEEKDAYS, WEEK_ORDER, addDays, dayKey, fmtDay, fmtWhen, isDayKey, mondayOf } from "../lib/days.ts";
+import { LOCATIONS, WHO, stapleStatus } from "../lib/kitchen.ts";
+
+const role = Astro.locals.role!;
+const owner = role === "owner";
+const today = dayKey();
+const thisWeek = mondayOf(today);
+const wq = Astro.url.searchParams.get("week") ?? "";
+const week = isDayKey(wq) ? mondayOf(wq) : thisWeek;
+const editPrep = Astro.url.searchParams.get("editPrep");
+const editStaple = Astro.url.searchParams.get("editStaple");
+
+const [prep, lastWeekCount, open, got, staples] = await Promise.all([
+  prisma.prepItem.findMany({ where: { weekOf: week }, orderBy: { createdAt: "asc" } }),
+  prisma.prepItem.count({ where: { weekOf: addDays(week, -7) } }),
+  prisma.groceryItem.findMany({ where: { gotAt: null }, orderBy: { createdAt: "asc" }, include: { staple: true } }),
+  prisma.groceryItem.findMany({ where: { gotAt: { gte: new Date(Date.now() - 14 * 864e5) } }, orderBy: { gotAt: "desc" } }),
+  prisma.staple.findMany({ orderBy: { name: "asc" } }),
+]);
+
+// Prep grouped by day, Monday first, "any day" last.
+const prepGroups = [...WEEK_ORDER.map((d) => [d, prep.filter((p) => p.prepDay === d)] as const), [null, prep.filter((p) => p.prepDay === null)] as const]
+  .filter(([, list]) => list.length);
+const prepDone = prep.filter((p) => p.done).length;
+const editingPrep = editPrep ? prep.find((p) => p.id === editPrep) ?? null : null;
+
+const stapleGroups = LOCATIONS.concat(staples.map((s) => s.location).filter((l) => !LOCATIONS.includes(l)))
+  .map((l) => [l, staples.filter((s) => s.location === l)] as const)
+  .filter(([, list]) => list.length);
+const below = staples.filter((s) => stapleStatus(s) === "below").length;
+const atMin = staples.filter((s) => stapleStatus(s) === "at").length;
+const editingStaple = editStaple ? staples.find((s) => s.id === editStaple) ?? null : null;
+
+const weekLabel = week === thisWeek ? "This week" : week === addDays(thisWeek, 7) ? "Next week" : week === addDays(thisWeek, -7) ? "Last week" : "Week of " + fmtDay(week);
+const weekQ = week === thisWeek ? "" : `week=${week}&`;
+---
+<Shell title="Kitchen" tab="kitchen">
+  <nav class="jump">
+    <a href="#prep">Food prep <span class="num">{prepDone}/{prep.length}</span></a>
+    <a href="#groceries">Grocery list <span class="num">{open.length}</span></a>
+    <a href="#staples">Pantry staples {below > 0 && <span class="chip bad">{below} low</span>}</a>
+  </nav>
+
+  <!-- ---------------- Food prep ---------------- -->
+  <section id="prep">
+    <div class="sec-head">
+      <h2>Food prep</h2>
+      <div class="row weeknav">
+        <a class="btn small" href={`/kitchen?week=${addDays(week, -7)}#prep`} aria-label="Previous week">‹</a>
+        <span class="wk"><b>{weekLabel}</b><span class="muted small">{fmtDay(week)} – {fmtDay(addDays(week, 6))}</span></span>
+        <a class="btn small" href={`/kitchen?week=${addDays(week, 7)}#prep`} aria-label="Next week">›</a>
+      </div>
+    </div>
+    {prep.length > 0 && (
+      <>
+        <div class="meter"><i style={`width:${Math.round((prepDone / prep.length) * 100)}%`}></i></div>
+        <span class="muted small num">{prepDone} of {prep.length} prepped</span>
+      </>
+    )}
+
+    {prep.length === 0 ? (
+      <div class="empty">
+        <b>No food prep planned for {weekLabel.toLowerCase()}.</b>
+        {owner ? "Add what you'd like prepped below, and pick a day if it matters." : "The owner hasn't added a prep list for this week yet."}
+        {owner && lastWeekCount > 0 && (
+          <form method="post" action="/api/owner/prep-copy">
+            <input type="hidden" name="week" value={week} />
+            <button>Copy last week's list ({lastWeekCount})</button>
+          </form>
+        )}
+      </div>
+    ) : (
+      <div class="groups">
+        {prepGroups.map(([d, list]) => (
+          <div>
+            <div class="label">{d === null ? "Any day this week" : WEEKDAYS[d] + " · " + fmtDay(addDays(week, (d + 6) % 7))}</div>
+            {list.map((p) => (
+              <div class:list={["item", { done: p.done }]} id={"p-" + p.id}>
+                {role === "manager" ? (
+                  <form method="post" action="/api/manager/prep-tick">
+                    <input type="hidden" name="id" value={p.id} />
+                    <button class="tick" aria-pressed={p.done ? "true" : "false"} aria-label={(p.done ? "Mark not prepped: " : "Mark prepped: ") + p.name}>
+                      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l3.2 3L13 4.5" /></svg>
+                    </button>
+                  </form>
+                ) : (
+                  <span class="tick" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l3.2 3L13 4.5" /></svg></span>
+                )}
+                <div class="body">
+                  <div class="t">{p.name}{p.amount && <span class="amt"> · {p.amount}</span>}</div>
+                  {p.details && <div class="details">{p.details}</div>}
+                  <div class="meta">
+                    {p.done ? <span>Prepped {fmtWhen(p.doneAt)}</span> : owner && <span class="miss">Not prepped yet</span>}
+                  </div>
+                  {role === "manager" ? (
+                    <form method="post" action="/api/manager/prep-note" class="inline">
+                      <input type="hidden" name="id" value={p.id} />
+                      <input type="text" name="note" value={p.note} placeholder="Add a note (optional)" aria-label={"Note for " + p.name} maxlength="600" />
+                      <button class="small">Save</button>
+                    </form>
+                  ) : p.note && <div class="note"><b>Note:</b> {p.note}</div>}
+                  {owner && (
+                    <div class="row">
+                      <a class="btn small" href={`/kitchen?${weekQ}editPrep=${p.id}#prep-form`}>Edit</a>
+                      <details class="del">
+                        <summary class="btn small">Delete</summary>
+                        <form method="post" action="/api/owner/prep-delete"><input type="hidden" name="id" value={p.id} /><button class="small danger">Yes, delete it</button></form>
+                      </details>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+    )}
+
+    {owner && (
+      <form method="post" action="/api/owner/prep" class="card stack" id="prep-form">
+        <h3>{editingPrep ? "Edit prep item" : "Add to " + weekLabel.toLowerCase() + "'s prep"}</h3>
+        <input type="hidden" name="id" value={editingPrep?.id ?? ""} />
+        <input type="hidden" name="week" value={week} />
+        <div class="grid2">
+          <div class="field">
+            <label for="prep-name">Food</label>
+            <input type="text" id="prep-name" name="name" required maxlength="200" value={editingPrep?.name ?? ""} placeholder="Grilled chicken breasts" />
+          </div>
+          <div class="field">
+            <label for="prep-amount">How much <span class="hint">(optional)</span></label>
+            <input type="text" id="prep-amount" name="amount" maxlength="80" value={editingPrep?.amount ?? ""} placeholder="2 lbs, sliced" />
+          </div>
+        </div>
+        <div class="field">
+          <label for="prep-day">Prep day</label>
+          <select id="prep-day" name="prepDay" style="max-width:260px">
+            <option value="">Any day this week</option>
+            {WEEK_ORDER.map((d) => <option value={d} selected={editingPrep?.prepDay === d}>{WEEKDAYS[d]} · {fmtDay(addDays(week, (d + 6) % 7))}</option>)}
+          </select>
+        </div>
+        <div class="field">
+          <label for="prep-details">Instructions <span class="hint">(optional)</span></label>
+          <textarea id="prep-details" name="details" maxlength="2000" placeholder="Season with the lemon pepper, portion into 6 glass containers">{editingPrep?.details}</textarea>
+        </div>
+        <div class="row">
+          <button class="primary">{editingPrep ? "Save changes" : "Add to prep list"}</button>
+          {editingPrep && <a class="btn" href={`/kitchen?${weekQ}#prep`}>Cancel</a>}
+        </div>
+      </form>
+    )}
+  </section>
+
+  <!-- ---------------- Grocery list ---------------- -->
+  <section id="groceries">
+    <div class="sec-head"><h2>Grocery list</h2><span class="muted small">{open.length ? `${open.length} to get` : "All caught up"}</span></div>
+
+    <form method="post" action="/api/kitchen/grocery-add" class="addrow">
+      <input type="text" name="name" required maxlength="120" placeholder="Add an item — e.g. Oat milk" aria-label="Item" />
+      <input type="text" name="qty" maxlength="60" placeholder="How much" aria-label="How much" class="qty" />
+      <button class="primary">Add</button>
+    </form>
+
+    {open.length === 0 ? (
+      <div class="empty"><b>Nothing on the list.</b>Add what's needed above. Pantry staples that run low show up here on their own.</div>
+    ) : (
+      <div>
+        {open.map((g) => (
+          <div class="item" id={"g-" + g.id}>
+            {g.stapleId ? (
+              <span class="tick" aria-hidden="true"></span>
+            ) : (
+              <form method="post" action="/api/kitchen/grocery-got">
+                <input type="hidden" name="id" value={g.id} />
+                <button class="tick" aria-label={"Got it: " + g.name}>
+                  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l3.2 3L13 4.5" /></svg>
+                </button>
+              </form>
+            )}
+            <div class="body">
+              <div class="t">{g.name}{g.qty && <span class="amt"> · {g.qty}</span>}</div>
+              <div class="meta">
+                {g.stapleId && <span class="chip warn">Pantry staple</span>}
+                <span>{g.addedBy === "auto" ? "Added automatically when it ran low" : `Added by ${WHO[g.addedBy] ?? g.addedBy}`} · {fmtWhen(g.createdAt)}</span>
+              </div>
+              {g.stapleId && (
+                <form method="post" action="/api/kitchen/grocery-got" class="inline">
+                  <input type="hidden" name="id" value={g.id} />
+                  <input type="number" name="bought" min="1" max="9999" required inputmode="numeric" placeholder={"How many" + (g.staple?.unit ? " " + g.staple.unit : "") + "?"} aria-label={"How many " + g.name + " bought"} />
+                  <button class="small primary">Got it</button>
+                </form>
+              )}
+              <form method="post" action="/api/kitchen/grocery-remove" class="rm">
+                <input type="hidden" name="id" value={g.id} />
+                <button class="link small">Remove</button>
+              </form>
+            </div>
+          </div>
+        ))}
+      </div>
+    )}
+
+    {got.length > 0 && (
+      <details class="more" open={open.length === 0}>
+        <summary>Picked up in the last two weeks ({got.length})</summary>
+        <div class="gotlist">
+          {got.map((g) => (
+            <div class="gotrow">
+              <span class="ok-mark">✓</span>
+              <span class="grow">
+                <b>{g.name}</b>{g.boughtQty != null ? ` · bought ${g.boughtQty}` : g.qty && ` · ${g.qty}`}
+                <span class="muted small"> — {WHO[g.gotBy ?? ""] ?? "Someone"}, {fmtWhen(g.gotAt)}</span>
+              </span>
+              {g.gotAt && dayKey(g.gotAt) === today && (
+                <form method="post" action="/api/kitchen/grocery-undo"><input type="hidden" name="id" value={g.id} /><button class="link small">Undo</button></form>
+              )}
+            </div>
+          ))}
+        </div>
+        {owner && (
+          <form method="post" action="/api/owner/grocery-clear" style="margin-top:10px"><button class="small">Clear picked-up list</button></form>
+        )}
+      </details>
+    )}
+  </section>
+
+  <!-- ---------------- Pantry staples ---------------- -->
+  <section id="staples">
+    <div class="sec-head">
+      <h2>Pantry staples</h2>
+      <span class="row">
+        {below > 0 && <span class="chip bad">{below} below minimum</span>}
+        {atMin > 0 && <span class="chip warn">{atMin} at minimum</span>}
+        {staples.length > 0 && below + atMin === 0 && <span class="chip ok">All stocked</span>}
+      </span>
+    </div>
+    <p class="muted small" style="margin:0">
+      {owner
+        ? "Set a minimum for each item. When the count reaches it, the item goes on the grocery list."
+        : "Update the count whenever you use the last of something or put new stock away. Anything at its minimum goes on the grocery list."}
+    </p>
+
+    {staples.length === 0 ? (
+      <div class="empty"><b>No staples yet.</b>{owner ? "Add the things the house should never run out of, and how many to keep on hand." : "The owner hasn't added any staples yet."}</div>
+    ) : stapleGroups.map(([loc, list]) => (
+      <div>
+        <div class="label" style="padding:6px 0 2px">{loc}</div>
+        {list.map((s) => {
+          const st = stapleStatus(s);
+          return (
+            <div class="staple" id={"s-" + s.id}>
+              <div class="info">
+                <div class="t">{s.name}</div>
+                <div class="row" style="gap:6px">
+                  <span class:list={["chip", { bad: st === "below", warn: st === "at", ok: st === "ok" }]}>
+                    {st === "below" ? "Below minimum" : st === "at" ? "At minimum" : "Stocked"}
+                  </span>
+                  <span class="num small">{s.onHand} on hand · min {s.minStock}{s.unit && " " + s.unit}</span>
+                </div>
+                <span class="muted small">{s.countedAt ? `Counted by ${WHO[s.countedBy ?? ""] ?? "someone"}, ${fmtWhen(s.countedAt)}` : "Not counted yet"}</span>
+              </div>
+              <div class="actions">
+                <form method="post" action="/api/kitchen/count" class="inline">
+                  <input type="hidden" name="id" value={s.id} />
+                  <input type="number" name="onHand" min="0" max="99999" required inputmode="numeric" value={s.onHand} aria-label={"How many " + s.name + " on hand"} />
+                  <button class="small">Update</button>
+                </form>
+                {owner && (
+                  <div class="row" style="gap:6px">
+                    <a class="btn small" href={`/kitchen?editStaple=${s.id}#staple-form`}>Edit</a>
+                    <details class="del">
+                      <summary class="btn small">Delete</summary>
+                      <form method="post" action="/api/owner/staple-delete"><input type="hidden" name="id" value={s.id} /><button class="small danger">Yes, delete it</button></form>
+                    </details>
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    ))}
+
+    {owner && (
+      <form method="post" action="/api/owner/staple" class="card stack" id="staple-form">
+        <h3>{editingStaple ? "Edit staple" : "Add a staple"}</h3>
+        <input type="hidden" name="id" value={editingStaple?.id ?? ""} />
+        <div class="grid2">
+          <div class="field">
+            <label for="st-name">Item</label>
+            <input type="text" id="st-name" name="name" required maxlength="120" value={editingStaple?.name ?? ""} placeholder="Paper towels" />
+          </div>
+          <div class="field">
+            <label for="st-unit">Counted in <span class="hint">(optional)</span></label>
+            <input type="text" id="st-unit" name="unit" maxlength="30" value={editingStaple?.unit ?? ""} placeholder="rolls, cans, bottles" />
+          </div>
+        </div>
+        <div class="grid3">
+          <div class="field">
+            <label for="st-loc">Kept in</label>
+            <select id="st-loc" name="location">{LOCATIONS.map((l) => <option selected={(editingStaple?.location ?? "Pantry") === l}>{l}</option>)}</select>
+          </div>
+          <div class="field">
+            <label for="st-min">Minimum to keep</label>
+            <input type="number" id="st-min" name="minStock" min="0" max="99999" required inputmode="numeric" value={editingStaple?.minStock ?? ""} placeholder="4" />
+          </div>
+          <div class="field">
+            <label for="st-on">On hand now</label>
+            <input type="number" id="st-on" name="onHand" min="0" max="99999" required inputmode="numeric" value={editingStaple?.onHand ?? ""} placeholder="6" />
+          </div>
+        </div>
+        <div class="row">
+          <button class="primary">{editingStaple ? "Save changes" : "Add staple"}</button>
+          {editingStaple && <a class="btn" href="/kitchen#staples">Cancel</a>}
+        </div>
+      </form>
+    )}
+  </section>
+</Shell>
+
+<style>
+  .jump { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 22px; }
+  .jump a { display: inline-flex; gap: 8px; align-items: center; padding: 7px 12px; border: 1px solid var(--line); border-radius: 99px;
+    background: var(--surface); color: var(--ink); text-decoration: none; font-weight: 600; font-size: .9rem; }
+  .jump .num { color: var(--muted); font-weight: 500; }
+  section { scroll-margin-top: 60px; }
+  .weeknav { gap: 8px; }
+  .wk { display: flex; flex-direction: column; align-items: center; line-height: 1.2; min-width: 130px; }
+  .groups { display: flex; flex-direction: column; gap: 16px; }
+  .item { display: grid; grid-template-columns: auto 1fr; gap: 12px; padding: 12px 0; border-top: 1px solid var(--line); }
+  form { margin: 0; }
+  .tick { width: 32px; height: 32px; min-height: 0; padding: 0; border-radius: 8px; border: 2px solid var(--line);
+    background: var(--surface); color: var(--accent-ink); display: grid; place-items: center; }
+  span.tick:empty { border-style: dashed; }
+  .tick svg { width: 18px; height: 18px; opacity: 0; }
+  .done .tick { background: var(--accent); border-color: var(--accent); }
+  .done .tick svg { opacity: 1; }
+  .body { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .t { font-weight: 600; overflow-wrap: anywhere; padding-top: 4px; }
+  .amt { font-weight: 400; color: var(--muted); }
+  .done .t { color: var(--muted); text-decoration: line-through; text-decoration-color: var(--line); }
+  .details { font-size: .9rem; color: var(--muted); white-space: pre-wrap; }
+  .meta { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: .84rem; color: var(--muted); align-items: center; }
+  .meta:empty { display: none; }
+  .miss { color: var(--danger); font-weight: 600; }
+  .note { font-size: .9rem; background: var(--sunk); border-radius: 6px; padding: 6px 9px; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .inline { display: flex; gap: 6px; align-items: center; }
+  .inline input[type=text] { padding: 7px 10px; font-size: 15px; }
+  .inline input[type=number] { width: 120px; padding: 7px 10px; font-size: 16px; }
+  .rm { align-self: flex-start; }
+  .addrow { display: flex; gap: 8px; flex-wrap: wrap; }
+  .addrow input { flex: 1 1 200px; width: auto; }
+  .addrow input.qty { flex: 0 1 140px; }
+  .gotlist { display: flex; flex-direction: column; margin-top: 8px; }
+  .gotrow { display: flex; gap: 10px; align-items: baseline; padding: 7px 0; border-top: 1px solid var(--line); }
+  .ok-mark { color: var(--ok); font-weight: 700; }
+  .grow { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+  .staple { display: flex; justify-content: space-between; gap: 12px; padding: 12px 0; border-top: 1px solid var(--line); flex-wrap: wrap; }
+  .staple .info { display: flex; flex-direction: column; gap: 4px; flex: 1 1 240px; min-width: 0; }
+  .actions { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
+  @media (max-width: 520px) { .actions { align-items: flex-start; } }
+  .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  @media (max-width: 560px) { .grid3 { grid-template-columns: 1fr; } }
+  input[type=number] { font: 16px var(--body); color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 10px 11px; width: 100%; }
+  details.del summary { list-style: none; }
+  details.del summary::-webkit-details-marker { display: none; }
+  details.del[open] summary { border-color: var(--danger); color: var(--danger); }
+  details.del form { margin-top: 6px; }
+</style>

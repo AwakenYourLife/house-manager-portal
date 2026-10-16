@@ -100,3 +100,64 @@ model Message {
 
   @@index([createdAt])
 }
+
+/// One thing to buy. Either person adds to the list; checking it off records
+/// who got it and when. Items raised by a pantry staple running low carry its
+/// id, and checking one off adds what was bought back onto the staple's count.
+model GroceryItem {
+  id        String    @id @default(cuid())
+  name      String
+  /// Free text — "2 lbs", "large bag".
+  qty       String    @default("")
+  note      String    @default("")
+  /// "owner" | "manager" | "auto" (raised by a staple below its minimum)
+  addedBy   String
+  createdAt DateTime  @default(now())
+  gotAt     DateTime?
+  gotBy     String?
+  /// How many were bought, for a staple-linked item.
+  boughtQty Int?
+  stapleId  String?
+  staple    Staple?   @relation(fields: [stapleId], references: [id], onDelete: SetNull)
+
+  @@index([gotAt])
+}
+
+/// Something the house should never run out of. The owner sets the minimum;
+/// the manager keeps onHand current.
+model Staple {
+  id        String    @id @default(cuid())
+  name      String
+  /// What a count is in — "rolls", "cans", "bottles".
+  unit      String    @default("")
+  /// Where it's kept — Pantry, Fridge, Freezer, Cleaning, Bathroom, Other.
+  location  String    @default("Pantry")
+  minStock  Int
+  onHand    Int       @default(0)
+  /// When onHand was last set by a count or a purchase.
+  countedAt DateTime?
+  countedBy String?
+  createdAt DateTime  @default(now())
+
+  groceries GroceryItem[]
+}
+
+/// One thing to prep in a given week — "Grilled chicken, 2 lbs, sliced".
+/// weekOf is that week's Monday ("YYYY-MM-DD"), so each week is its own list
+/// and past weeks stay as they were.
+model PrepItem {
+  id        String    @id @default(cuid())
+  weekOf    String
+  name      String
+  /// How much — "2 lbs", "6 portions".
+  amount    String    @default("")
+  details   String    @default("")
+  /// Which day to prep it, 0 = Sunday … 6 = Saturday; null = any day that week.
+  prepDay   Int?
+  createdAt DateTime  @default(now())
+  done      Boolean   @default(false)
+  doneAt    DateTime?
+  note      String    @default("")
+
+  @@index([weekOf])
+}
