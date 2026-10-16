@@ -46,6 +46,10 @@ const MESSAGES: Record<string, { tone: "good" | "bad"; text: string }> = {
   "prep-deleted": { tone: "good", text: "Prep item deleted." },
   "prep-copied": { tone: "good", text: "Last week's prep list copied in. Edit anything that's changed." },
   "prep-note": { tone: "good", text: "Note saved." },
+  "notice-sent": { tone: "good", text: "Note sent. It's at the top of her Today screen until she taps Got it." },
+  "notice-seen": { tone: "good", text: "Marked as seen. The owner can see you got it." },
+  "notice-done": { tone: "good", text: "Marked done. The owner can see it." },
+  "notice-deleted": { tone: "good", text: "Note deleted." },
   oops: { tone: "bad", text: "That didn't go through. Please try again." },
 };
 
@@ -58,3 +62,6 @@ export function flashFor(code: string | null) {
 export function field(v: FormDataEntryValue | null, max = 4000): string {
   return typeof v === "string" ? v.trim().slice(0, max) : "";
 }
+
+/** Where a note action returns to — only ever one of these two pages. */
+export const safeBack = (b: string) => (b === "/notes" ? "/notes" : "/today");

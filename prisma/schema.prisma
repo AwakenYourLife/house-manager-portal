@@ -161,3 +161,22 @@ model PrepItem {
 
   @@index([weekOf])
 }
+
+/// A note from the owner to the manager — something to know, or a one-off task.
+/// It stays at the top of the manager's Today until they tap "Got it" (and, for
+/// a task, until they mark it done), then lives on in the Notes tab for
+/// reference. The owner sees exactly when each step happened.
+model Note {
+  id        String    @id @default(cuid())
+  body      String
+  isTask    Boolean   @default(false)
+  /// Optional "YYYY-MM-DD" a task should be done by.
+  dueDate   String?
+  createdAt DateTime  @default(now())
+  seenAt    DateTime?
+  doneAt    DateTime?
+  /// The manager's reply when marking a task done.
+  doneNote  String    @default("")
+
+  @@index([createdAt])
+}

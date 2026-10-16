@@ -4,6 +4,8 @@ import Checklist from "../components/Checklist.astro";
 import Report from "../components/Report.astro";
 import ShiftLine from "../components/ShiftLine.astro";
 import KitchenSummary from "../components/KitchenSummary.astro";
+import NoteCard from "../components/NoteCard.astro";
+import NoteForm from "../components/NoteForm.astro";
 import { dayKey, fmtDay, fmtDur, fmtTime } from "../lib/days.ts";
 import { loadDay, staleShift } from "../lib/house.ts";
 import { prisma } from "../lib/db.ts";
@@ -16,6 +18,12 @@ const day = d.day;
 const editing = Astro.url.searchParams.get("edit") === "1" || !day?.reportAt;
 const undone = d.items.filter((i) => !i.c?.done);
 const pct = d.total ? Math.round((d.done / d.total) * 100) : 0;
+// Open notes: not yet seen, or a task not yet done. The owner also sees what
+// was settled today, so "she got it" is visible without opening Notes.
+const allNotes = await prisma.note.findMany({ orderBy: { createdAt: "asc" }, take: 200 });
+const isOpen = (n: (typeof allNotes)[number]) => !n.seenAt || (n.isTask && !n.doneAt);
+const openNotes = allNotes.filter(isOpen);
+const settledToday = allNotes.filter((n) => !isOpen(n) && dayKey(n.doneAt ?? n.seenAt!) === key);
 const hasDuties = role === "owner" ? (await prisma.duty.count()) > 0 : true;
 // What the live timer adds to: everything worked today except the open shift.
 const base = d.openShift ? d.worked - (Date.now() - d.openShift.clockIn.getTime()) : 0;
@@ -31,6 +39,12 @@ const base = d.openShift ? d.worked - (Date.now() - d.openShift.clockIn.getTime(
 
   {role === "manager" ? (
     <>
+      {openNotes.length > 0 && (
+        <section>
+          <div class="sec-head"><h2>From the owner</h2><a class="small" href="/notes">All notes</a></div>
+          {openNotes.map((n) => <NoteCard note={n} role="manager" back="/today" />)}
+        </section>
+      )}
       {day?.ownerNote && <div class="callout" style="margin-bottom:22px"><div class="label">Note for today</div><p>{day.ownerNote}</p></div>}
 
       <section>
@@ -131,14 +145,10 @@ const base = d.openShift ? d.worked - (Date.now() - d.openShift.clockIn.getTime(
       <KitchenSummary />
 
       <section>
-        <h2>Note for today</h2>
-        <form method="post" action="/api/owner/day-note" class="stack">
-          <div class="field">
-            <label for="note" class="hint">Shows at the top of the manager's screen today.</label>
-            <textarea id="note" name="note" maxlength="4000" placeholder="Guests arrive at 6. Please set up the guest room first.">{day?.ownerNote}</textarea>
-          </div>
-          <div class="row"><button class="primary">Post note</button></div>
-        </form>
+        <div class="sec-head"><h2>Notes for the manager</h2><a class="small" href="/notes">All notes</a></div>
+        <NoteForm back="/today" />
+        {openNotes.map((n) => <NoteCard note={n} role="owner" back="/today" />)}
+        {settledToday.map((n) => <NoteCard note={n} role="owner" back="/today" />)}
       </section>
 
       <section>

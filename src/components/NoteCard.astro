@@ -1,0 +1,70 @@
+---
+/**
+ * One owner→manager note with where it stands. The manager acts on it here
+ * ("Got it", then "Done" for a task); the owner sees each step and when.
+ */
+import type { Note } from "../generated/prisma/client.js";
+import { dayKey, fmtDay, fmtWhen } from "../lib/days.ts";
+
+interface Props { note: Note; role: "owner" | "manager"; back: string }
+const { note: n, role, back } = Astro.props;
+const overdue = n.isTask && !n.doneAt && n.dueDate && n.dueDate < dayKey();
+const open = !n.seenAt || (n.isTask && !n.doneAt);
+---
+<article class:list={["note", { open, task: n.isTask }]} id={"n-" + n.id}>
+  <div class="head">
+    <span class:list={["chip", { warn: n.isTask && !n.doneAt, ok: !!n.doneAt }]}>{n.isTask ? "Task" : "Note"}</span>
+    {n.dueDate && <span class:list={["small", { due: overdue, muted: !overdue }]}>{overdue ? "Overdue · " : ""}Due {fmtDay(n.dueDate)}</span>}
+    <span class="muted small when">From the owner · {fmtWhen(n.createdAt)}</span>
+  </div>
+  <p class="body">{n.body}</p>
+
+  <div class="status small">
+    {n.seenAt ? <span class="ok">✓ Seen {fmtWhen(n.seenAt)}</span> : <span class="pending">Not seen yet</span>}
+    {n.isTask && (n.doneAt ? <span class="ok">✓ Done {fmtWhen(n.doneAt)}</span> : n.seenAt && <span class="pending">Not done yet</span>)}
+  </div>
+  {n.doneNote && <div class="reply"><b>Reply:</b> {n.doneNote}</div>}
+
+  {role === "manager" && !n.seenAt && (
+    <form method="post" action="/api/manager/notice-seen">
+      <input type="hidden" name="id" value={n.id} /><input type="hidden" name="back" value={back} />
+      <button class="primary">Got it</button>
+    </form>
+  )}
+  {role === "manager" && n.seenAt && n.isTask && !n.doneAt && (
+    <form method="post" action="/api/manager/notice-done" class="donef">
+      <input type="hidden" name="id" value={n.id} /><input type="hidden" name="back" value={back} />
+      <input type="text" name="doneNote" maxlength="1000" placeholder="Anything to report? (optional)" aria-label="Reply to the owner" />
+      <button class="primary">Mark done</button>
+    </form>
+  )}
+  {role === "owner" && (
+    <details class="del">
+      <summary class="link small">Delete</summary>
+      <form method="post" action="/api/owner/notice-delete">
+        <input type="hidden" name="id" value={n.id} /><input type="hidden" name="back" value={back} />
+        <button class="small danger">Yes, delete this note</button>
+      </form>
+    </details>
+  )}
+</article>
+
+<style>
+  .note { border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; background: var(--surface); display: flex; flex-direction: column; gap: 8px; }
+  .note.open.task, .note.open { border-color: var(--brass); background: var(--brass-soft); }
+  .note.open .chip:not(.ok) { background: var(--surface); }
+  .head { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
+  .when { margin-left: auto; }
+  .body { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 1.02rem; }
+  .status { display: flex; gap: 14px; flex-wrap: wrap; }
+  .ok { color: var(--ok); font-weight: 600; }
+  .pending { color: var(--muted); }
+  .due { color: var(--danger); font-weight: 600; }
+  .reply { font-size: .92rem; background: var(--sunk); border-radius: 6px; padding: 7px 10px; white-space: pre-wrap; overflow-wrap: anywhere; }
+  form { margin: 0; }
+  .donef { display: flex; gap: 8px; flex-wrap: wrap; }
+  .donef input { flex: 1 1 220px; width: auto; }
+  details.del summary { list-style: none; cursor: pointer; display: inline; }
+  details.del summary::-webkit-details-marker { display: none; }
+  details.del form { margin-top: 6px; }
+</style>

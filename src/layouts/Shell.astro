@@ -7,20 +7,23 @@
  */
 import { flashFor } from "../lib/flash.ts";
 import { unreadFor } from "../lib/house.ts";
+import { prisma } from "../lib/db.ts";
 import { dayKey, fmtDay } from "../lib/days.ts";
 
 interface Props {
   title: string;
-  tab?: "today" | "duties" | "kitchen" | "log" | "messages";
+  tab?: "today" | "duties" | "kitchen" | "notes" | "log" | "messages";
 }
 const { title, tab } = Astro.props;
 const role = Astro.locals.role;
 const flash = flashFor(Astro.url.searchParams.get("f"));
 const unread = role ? await unreadFor(role) : 0;
+// Notes the manager hasn't tapped "Got it" on yet.
+const unseen = role === "manager" ? await prisma.note.count({ where: { seenAt: null } }) : 0;
 
 const tabs = role === "owner"
-  ? [["today", "Today", "/today"], ["duties", "Duties", "/duties"], ["kitchen", "Kitchen", "/kitchen"], ["log", "Log", "/log"], ["messages", "Messages", "/messages"]]
-  : [["today", "Today", "/today"], ["kitchen", "Kitchen", "/kitchen"], ["log", "My log", "/log"], ["messages", "Messages", "/messages"]];
+  ? [["today", "Today", "/today"], ["duties", "Duties", "/duties"], ["kitchen", "Kitchen", "/kitchen"], ["notes", "Notes", "/notes"], ["log", "Log", "/log"], ["messages", "Messages", "/messages"]]
+  : [["today", "Today", "/today"], ["kitchen", "Kitchen", "/kitchen"], ["notes", "Notes", "/notes"], ["log", "My log", "/log"], ["messages", "Messages", "/messages"]];
 ---
 
 <html lang="en">
@@ -164,6 +167,7 @@ const tabs = role === "owner"
             <a href={href} aria-current={tab === key ? "page" : undefined}>
               {label}
               {key === "messages" && unread > 0 && tab !== "messages" && <span class="badge">{unread}</span>}
+              {key === "notes" && unseen > 0 && <span class="badge">{unseen}</span>}
             </a>
           ))}
         </nav>

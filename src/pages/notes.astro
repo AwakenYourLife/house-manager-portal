@@ -1,0 +1,28 @@
+---
+import Shell from "../layouts/Shell.astro";
+import NoteCard from "../components/NoteCard.astro";
+import NoteForm from "../components/NoteForm.astro";
+import { prisma } from "../lib/db.ts";
+
+const role = Astro.locals.role!;
+const notes = await prisma.note.findMany({ orderBy: { createdAt: "desc" }, take: 300 });
+const open = notes.filter((n) => !n.seenAt || (n.isTask && !n.doneAt));
+const settled = notes.filter((n) => !open.includes(n));
+---
+<Shell title="Notes" tab="notes">
+  {role === "owner" && <section><NoteForm back="/notes" /></section>}
+
+  <section>
+    <div class="sec-head"><h2>Waiting on {role === "owner" ? "the manager" : "you"}</h2><span class="muted small">{open.length}</span></div>
+    {open.length === 0
+      ? <div class="empty"><b>Nothing waiting.</b>{role === "owner" ? "Every note has been seen, and every task is done." : "You're all caught up."}</div>
+      : open.map((n) => <NoteCard note={n} role={role} back="/notes" />)}
+  </section>
+
+  <section>
+    <div class="sec-head"><h2>All notes</h2><span class="muted small">Newest first</span></div>
+    {settled.length === 0
+      ? <p class="muted" style="margin:0">Notes that have been seen, and tasks that are done, are kept here for reference.</p>
+      : settled.map((n) => <NoteCard note={n} role={role} back="/notes" />)}
+  </section>
+</Shell>
