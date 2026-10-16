@@ -79,8 +79,16 @@ npm run dev
   a schema change, apply it from this folder before pushing:
 
   ```
-  DATABASE_URL="<production url>" npx prisma migrate deploy
+  DATABASE_URL="<production url>" PRISMA_SCHEMA_DISABLE_ADVISORY_LOCK=1 npx prisma migrate deploy
   ```
+
+  `PRISMA_SCHEMA_DISABLE_ADVISORY_LOCK=1` is needed because the database URL is
+  Prisma Postgres's *pooled* connection, which can't hold the lock Prisma takes
+  during a migration — without it the command times out (P1002). This is also
+  why running migrations in Render's pre-deploy step failed.
+
+  Apply the migration **before** pushing the code that needs it, or the new
+  version will error on the missing tables until it's applied.
 
 Changing `MANAGER_PASSWORD` in Render signs the manager out on every device and
 leaves the owner signed in, and the reverse for `OWNER_PASSWORD`.
