@@ -50,6 +50,8 @@ const MESSAGES: Record<string, { tone: "good" | "bad"; text: string }> = {
   "notice-seen": { tone: "good", text: "Marked as seen. The owner can see you got it." },
   "notice-done": { tone: "good", text: "Marked done. The owner can see it." },
   "notice-deleted": { tone: "good", text: "Note deleted." },
+  "pay-saved": { tone: "good", text: "Pay settings saved." },
+  "bad-pay": { tone: "bad", text: "Use a number for both, like 25 or 25.50 for the rate and 20 for the hours." },
   oops: { tone: "bad", text: "That didn't go through. Please try again." },
 };
 

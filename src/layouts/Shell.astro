@@ -12,7 +12,7 @@ import { dayKey, fmtDay } from "../lib/days.ts";
 
 interface Props {
   title: string;
-  tab?: "today" | "duties" | "kitchen" | "notes" | "log" | "messages";
+  tab?: "today" | "duties" | "kitchen" | "notes" | "payroll" | "log" | "messages";
 }
 const { title, tab } = Astro.props;
 const role = Astro.locals.role;
@@ -22,7 +22,7 @@ const unread = role ? await unreadFor(role) : 0;
 const unseen = role === "manager" ? await prisma.note.count({ where: { seenAt: null } }) : 0;
 
 const tabs = role === "owner"
-  ? [["today", "Today", "/today"], ["duties", "Duties", "/duties"], ["kitchen", "Kitchen", "/kitchen"], ["notes", "Notes", "/notes"], ["log", "Log", "/log"], ["messages", "Messages", "/messages"]]
+  ? [["today", "Today", "/today"], ["duties", "Duties", "/duties"], ["kitchen", "Kitchen", "/kitchen"], ["notes", "Notes", "/notes"], ["log", "Log", "/log"], ["payroll", "Payroll", "/payroll"], ["messages", "Messages", "/messages"]]
   : [["today", "Today", "/today"], ["kitchen", "Kitchen", "/kitchen"], ["notes", "Notes", "/notes"], ["log", "My log", "/log"], ["messages", "Messages", "/messages"]];
 ---
 

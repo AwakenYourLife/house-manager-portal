@@ -28,7 +28,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
     return context.redirect("/login?next=" + encodeURIComponent(context.url.pathname));
   }
 
-  const ownerOnly = path === "/duties" || path.startsWith("/api/owner/");
+  const ownerOnly = path === "/duties" || path === "/payroll" || path.startsWith("/api/owner/");
   const managerOnly = path.startsWith("/api/manager/");
   if ((ownerOnly && role !== "owner") || (managerOnly && role !== "manager")) {
     return context.redirect("/today?f=not-yours");

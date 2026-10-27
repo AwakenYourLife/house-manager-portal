@@ -184,3 +184,21 @@ model Note {
 
   @@index([createdAt])
 }
+
+/// Portal-wide settings. One row, id 1.
+model Settings {
+  id               Int @id @default(1)
+  /// The manager's scheduled hours per week, in minutes (20h = 1200).
+  scheduledMinutes Int @default(1200)
+}
+
+/// The hourly rate, with history: each row applies from its week onward, so a
+/// raise never rewrites what earlier weeks were paid.
+model PayRate {
+  id            String   @id @default(cuid())
+  /// The Monday ("YYYY-MM-DD") of the first week this rate applies to.
+  effectiveFrom String   @unique
+  /// Cents per hour — $25.00 is 2500.
+  rateCents     Int
+  createdAt     DateTime @default(now())
+}

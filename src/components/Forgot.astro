@@ -1,0 +1,11 @@
+---
+import type { PayShift } from "../lib/payroll.ts";
+import { fmtDay, fmtTime } from "../lib/days.ts";
+interface Props { list: PayShift[] }
+const { list } = Astro.props;
+---
+<div class="banner">
+  {list.map((s) => (
+    <div>No clock-out on {fmtDay(s.date)} (clocked in {fmtTime(s.clockIn)}), so that shift isn't counted. <a href={"/log/" + s.date}>Add the real finish time</a>.</div>
+  ))}
+</div>

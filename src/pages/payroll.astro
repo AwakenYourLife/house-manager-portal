@@ -1,0 +1,126 @@
+---
+import Shell from "../layouts/Shell.astro";
+import Forgot from "../components/Forgot.astro";
+import { fmtDay, fmtTime } from "../lib/days.ts";
+import { hm, money, payrollWeeks } from "../lib/payroll.ts";
+
+const { weeks, scheduledMinutes, currentRate, thisMonday } = await payrollWeeks(12);
+const cur = weeks[0];
+// Past weeks with any time on them, plus the current week always.
+const past = weeks.slice(1).filter((w) => w.days.length > 0);
+const editing = Astro.url.searchParams.get("edit") === "1";
+const diff = (w: (typeof weeks)[number]) => w.minutes - w.scheduledMinutes;
+---
+<Shell title="Payroll" tab="payroll">
+  <section>
+    <div class="sec-head">
+      <h2>Payroll</h2>
+      <span class="muted small">{money(currentRate)}/hour · {hm(scheduledMinutes)} scheduled a week · <a href="/payroll?edit=1#settings">Change</a></span>
+    </div>
+    <p class="muted small" style="margin:0">Hours are counted to the minute from her clock-in and clock-out times, Monday to Sunday.</p>
+  </section>
+
+  <section class="card stack this">
+    <div class="sec-head">
+      <h3>This week · {fmtDay(cur.monday)} – {fmtDay(cur.sunday)}</h3>
+      {cur.live && <span class="chip ok"><span class="dot"></span>On the clock now</span>}
+    </div>
+    <div class="stats">
+      <div><div class="label">Hours {cur.live ? "so far" : "worked"}</div><div class="n">{hm(cur.minutes)}</div></div>
+      <div><div class="label">Pay {cur.live ? "so far" : ""}</div><div class="n">{money(cur.payCents)}</div></div>
+      <div><div class="label">Scheduled</div><div class="n">{hm(cur.scheduledMinutes)}</div><div class="muted small">{money(cur.scheduledPayCents)}</div></div>
+      <div><div class="label">Left to schedule</div><div class="n">{hm(Math.max(0, cur.scheduledMinutes - cur.minutes))}</div></div>
+    </div>
+    <div class="meter"><i style={`width:${Math.min(100, Math.round((cur.minutes / Math.max(1, cur.scheduledMinutes)) * 100))}%`}></i></div>
+    {cur.forgotten.length > 0 && <Forgot list={cur.forgotten} />}
+  </section>
+
+  {past.length === 0 ? (
+    <section><div class="empty"><b>No earlier weeks yet.</b>Each finished week shows here with its hours and pay.</div></section>
+  ) : (
+    <section>
+      <h2>Past weeks</h2>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Week of</th><th class="r">Hours</th><th class="r">vs. schedule</th><th class="r">Rate</th><th class="r">Pay</th></tr></thead>
+          <tbody>
+            {past.map((w) => (
+              <tr>
+                <td><a href={"#w-" + w.monday}>{fmtDay(w.monday)}</a>{w.forgotten.length > 0 && <span class="chip bad" style="margin-left:6px">Fix needed</span>}</td>
+                <td class="r num">{hm(w.minutes)}</td>
+                <td class:list={["r num", { over: diff(w) > 0, under: diff(w) < 0 }]}>{diff(w) === 0 ? "on schedule" : (diff(w) > 0 ? "+" : "") + hm(diff(w))}</td>
+                <td class="r num">{money(w.rateCents)}</td>
+                <td class="r num"><b>{money(w.payCents)}</b></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  )}
+
+  {[cur, ...past].map((w) => (
+    <section id={"w-" + w.monday}>
+      <details class="more" open={w.current}>
+        <summary>{w.current ? "This week" : "Week of " + fmtDay(w.monday)}, day by day · {hm(w.minutes)} · {money(w.payCents)}</summary>
+        <div class="days">
+          {w.days.length === 0 && <p class="muted" style="margin:0">No clock-ins this week yet.</p>}
+          {w.days.map((d) => (
+            <div class="dayrow">
+              <a href={"/log/" + d.date} class="dn">{fmtDay(d.date)}</a>
+              <span class="sh">
+                {d.shifts.map((s) => (
+                  <span class="num">
+                    {fmtTime(s.clockIn)} – {s.clockOut ? fmtTime(s.clockOut) : s.live ? "now" : "no clock-out"}
+                    {s.editedByOwner && <span class="muted"> (corrected)</span>}
+                    {s.forgotten && <span class="bad"> · not counted</span>}
+                  </span>
+                ))}
+              </span>
+              <span class="num r">{hm(d.minutes)}</span>
+            </div>
+          ))}
+          {w.days.length > 0 && <div class="dayrow total"><span class="dn">Total</span><span class="sh muted small">at {money(w.rateCents)}/hour</span><span class="num r">{hm(w.minutes)} · {money(w.payCents)}</span></div>}
+        </div>
+        {!w.current && w.forgotten.length > 0 && <Forgot list={w.forgotten} />}
+      </details>
+    </section>
+  ))}
+
+  <section id="settings">
+    <details class="more" open={editing}>
+      <summary>Change the pay rate or scheduled hours</summary>
+      <form method="post" action="/api/owner/payroll" class="card stack" style="margin-top:12px">
+        <div class="grid2">
+          <div class="field">
+            <label for="rate">Hourly rate ($)</label>
+            <input type="text" id="rate" name="rate" inputmode="decimal" required value={(currentRate / 100).toFixed(2)} pattern="\d+(\.\d{1,2})?" />
+            <span class="hint">A new rate applies from this week ({fmtDay(thisMonday)}) on. Earlier weeks keep the rate they were paid at.</span>
+          </div>
+          <div class="field">
+            <label for="hours">Scheduled hours per week</label>
+            <input type="text" id="hours" name="hours" inputmode="decimal" required value={String(scheduledMinutes / 60)} pattern="\d+(\.\d{1,2})?" />
+          </div>
+        </div>
+        <div class="row"><button class="primary">Save</button></div>
+      </form>
+    </details>
+  </section>
+</Shell>
+
+<style>
+  .this .stats { gap: 22px 32px; }
+  .tablewrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: .95rem; }
+  th { text-align: left; font-size: .72rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 600; padding: 0 10px 8px 0; }
+  td { padding: 10px 10px 10px 0; border-top: 1px solid var(--line); white-space: nowrap; }
+  .r { text-align: right; }
+  .over { color: var(--brass); }
+  .under { color: var(--muted); }
+  .days { display: flex; flex-direction: column; margin-top: 10px; }
+  .dayrow { display: grid; grid-template-columns: 110px 1fr auto; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); align-items: baseline; }
+  .dayrow.total { font-weight: 600; }
+  .sh { display: flex; flex-direction: column; gap: 2px; font-size: .9rem; min-width: 0; }
+  .bad { color: var(--danger); font-weight: 600; }
+  @media (max-width: 480px) { .dayrow { grid-template-columns: 1fr auto; } .sh { grid-column: 1 / -1; grid-row: 2; } }
+</style>
